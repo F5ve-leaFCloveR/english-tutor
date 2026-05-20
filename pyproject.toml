@@ -1,0 +1,36 @@
+[project]
+name = "english-tutor"
+version = "0.1.0"
+description = "Voice-first CLI for English speaking practice via LLM roleplay"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.40.0",
+    "faster-whisper>=1.0.0",
+    "sounddevice>=0.4.7",
+    "soundfile>=0.12.1",
+    "numpy>=1.26.0",
+    "pydantic-settings>=2.4.0",
+    "pyyaml>=6.0.2",
+    "jinja2>=3.1.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.6.0",
+]
+
+[project.scripts]
+tutor = "tutor.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tutor*"]
