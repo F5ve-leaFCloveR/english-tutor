@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import openai
 from openai import OpenAI
 
 from tutor.budget import BudgetTracker
+
+if TYPE_CHECKING:
+    from tutor.settings import Settings
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +39,7 @@ class LLMClient:
         self._base_delay = base_delay
 
     @classmethod
-    def from_settings(cls, settings, budget: BudgetTracker) -> "LLMClient":
+    def from_settings(cls, settings: "Settings", budget: BudgetTracker) -> "LLMClient":
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=settings.openrouter_api_key,
@@ -74,7 +77,7 @@ class LLMClient:
         tokens_in = getattr(usage, "prompt_tokens", 0) or 0
         tokens_out = getattr(usage, "completion_tokens", 0) or 0
         cost = 0.0
-        extra = getattr(response, "model_extra", None) or {}
+        extra = getattr(usage, "model_extra", None) or {}
         if "cost" in extra:
             try:
                 cost = float(extra["cost"])

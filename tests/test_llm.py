@@ -15,7 +15,9 @@ def _make_response(content: str, prompt_tokens: int, completion_tokens: int, cos
     response.usage.completion_tokens = completion_tokens
     response.usage.total_tokens = prompt_tokens + completion_tokens
     if cost is not None:
-        response.model_extra = {"cost": cost}
+        response.usage.model_extra = {"cost": cost}
+    else:
+        response.usage.model_extra = {}
     return response
 
 
@@ -124,3 +126,38 @@ def test_llm_complete_falls_back_to_estimated_cost_when_missing(tmp_path):
 
     assert budget.tokens_today == 1500
     assert budget.usd_today == 0.0
+
+
+def test_llm_complete_records_cost_from_usage_model_extra(tmp_path):
+    """Regression: cost lives inside response.usage.model_extra, NOT response.model_extra.
+
+    If a future refactor moves the lookup back to the top-level response, this test fails.
+    """
+    from tutor.llm import LLMClient
+
+    budget = _make_budget(tmp_path)
+    fake_client = MagicMock()
+
+    # Build the response so that response.model_extra is EMPTY but usage carries the cost.
+    response = MagicMock()
+    response.choices = [MagicMock()]
+    response.choices[0].message = MagicMock()
+    response.choices[0].message.content = "ok"
+    response.model_extra = {}  # top-level has no cost
+    response.usage = MagicMock()
+    response.usage.prompt_tokens = 10
+    response.usage.completion_tokens = 5
+    response.usage.total_tokens = 15
+    response.usage.model_extra = {"cost": 0.0025}
+
+    fake_client.chat.completions.create.return_value = response
+
+    llm = LLMClient(
+        client=fake_client,
+        model="google/gemini-2.5-flash",
+        budget=budget,
+    )
+    llm.complete(messages=[{"role": "user", "content": "Hi"}])
+
+    assert budget.tokens_today == 15
+    assert budget.usd_today == pytest.approx(0.0025)
