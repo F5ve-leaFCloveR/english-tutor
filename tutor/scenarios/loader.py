@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from jinja2 import Template
+from jinja2 import Template, StrictUndefined
 
 
 SCENARIOS_DIR = Path(__file__).parent
@@ -40,7 +40,7 @@ def load_scenario(scenario_id: str) -> Scenario:
     path = _scenario_path(scenario_id)
     if not path.exists():
         raise ScenarioNotFoundError(f"No scenario file at {path}")
-    data: dict[str, Any] = yaml.safe_load(path.read_text())
+    data: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
     return Scenario(
         id=data["id"],
         name=data["name"],
@@ -54,5 +54,5 @@ def load_scenario(scenario_id: str) -> Scenario:
 
 
 def build_system_prompt(scenario: Scenario, user_native_language: str = "Russian") -> str:
-    template = Template(scenario.system_prompt_template)
+    template = Template(scenario.system_prompt_template, undefined=StrictUndefined)
     return template.render(user_native_language=user_native_language).strip()
