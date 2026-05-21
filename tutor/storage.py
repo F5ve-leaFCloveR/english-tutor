@@ -25,10 +25,20 @@ class SessionStorage:
         return matches[0]
 
     def _write(self, path: Path, data: dict) -> None:
+        # Atomic against process crash, not against power loss (no fsync).
+        # Acceptable for a single-user local CLI.
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-        os.replace(str(tmp), str(path))
+        try:
+            tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+            os.replace(str(tmp), str(path))
+        except Exception:
+            # Clean up orphaned tmp on any failure during write.
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
 
     def create_session(self, scenario_id: str) -> str:
         now = self.now()

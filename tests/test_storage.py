@@ -67,3 +67,26 @@ def test_storage_write_is_atomic(tmp_path, mocker):
     src, dst = rename_was_called[-1]
     assert dst == str(session_path)
     assert src.endswith(".json.tmp") or src.endswith(".tmp")
+
+
+def test_storage_write_cleans_up_tmp_on_failure(tmp_path, mocker):
+    """Regression: failed write must not leave an orphan .tmp file."""
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+    import pytest
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    session_id = storage.create_session(scenario_id="tech_interview_behavioral")
+    session_path = next(tmp_path.rglob(f"{session_id}.json"))
+
+    # Force the write to fail by patching os.replace
+    mocker.patch("os.replace", side_effect=OSError("simulated rename failure"))
+
+    with pytest.raises(OSError):
+        storage.append_turn(session_id, user_text="hi", llm_text="hello")
+
+    # The original session file is still there
+    assert session_path.exists()
+    # No orphan .tmp file remains
+    tmp_files = list(session_path.parent.glob("*.tmp"))
+    assert tmp_files == [], f"orphan tmp files: {tmp_files}"
