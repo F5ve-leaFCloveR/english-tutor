@@ -15,10 +15,12 @@ vi.mock("../api/client", () => ({
       turns: [],
     }),
   },
+  ApiError: class extends Error {},
 }));
 
+const speakSpy = vi.fn().mockResolvedValue(undefined);
 vi.mock("../hooks/useTTS", () => ({
-  useTTS: () => ({ speak: vi.fn().mockResolvedValue(undefined), isSpeaking: false, voices: [] }),
+  useTTS: () => ({ speak: speakSpy, isSpeaking: false, voices: [] }),
 }));
 
 vi.mock("../hooks/useRecorder", () => ({
@@ -45,6 +47,14 @@ describe("SessionPage", () => {
     render(wrap("/session/s1"));
     await waitFor(() => {
       expect(screen.getByText("Hi, tell me about yourself.")).toBeInTheDocument();
+    });
+  });
+
+  it("auto-plays opening via TTS on mount", async () => {
+    speakSpy.mockClear();
+    render(wrap("/session/s1"));
+    await waitFor(() => {
+      expect(speakSpy).toHaveBeenCalledWith("Hi, tell me about yourself.");
     });
   });
 });

@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api, ApiError } from "../api/client";
-import type { EndSessionResult } from "../api/types";
 import { MessageBubble } from "../components/MessageBubble";
 import { PushToTalkButton } from "../components/PushToTalkButton";
-import { SessionSummary } from "../components/SessionSummary";
 import { useRecorder } from "../hooks/useRecorder";
 import { useTTS } from "../hooks/useTTS";
 
@@ -19,11 +17,21 @@ export function SessionPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [summary, setSummary] = useState<EndSessionResult | null>(null);
   const [errorToast, setErrorToast] = useState<string | null>(null);
 
   const recorder = useRecorder();
   const tts = useTTS();
+
+  const playedOpeningRef = useRef(false);
+
+  useEffect(() => {
+    if (playedOpeningRef.current) return;
+    const opening = messages.find((m) => m.role === "assistant")?.text;
+    if (opening) {
+      playedOpeningRef.current = true;
+      tts.speak(opening).catch(() => { /* non-fatal */ });
+    }
+  }, [messages, tts]);
 
   // Load session on mount; if route state has opening, seed initial messages quickly
   const initialOpening = (location.state as { opening?: string } | null)?.opening;
@@ -83,7 +91,9 @@ export function SessionPage() {
 
   const endMutation = useMutation({
     mutationFn: () => api.endSession(id!),
-    // Stage 2b: end now returns 202 + processing; summary modal removed in Task 10.
+    onSuccess: () => {
+      navigate("/");
+    },
   });
 
   const handleStart = async () => {
@@ -134,17 +144,6 @@ export function SessionPage() {
         <div className="fixed bottom-32 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-sm px-4 py-2 rounded shadow-lg">
           {errorToast}
         </div>
-      )}
-      {summary && (
-        <SessionSummary
-          growthPoints={summary.growth_points}
-          cardsCreated={summary.cards_created}
-          error={summary.growth_points_error}
-          onClose={() => {
-            setSummary(null);
-            navigate("/");
-          }}
-        />
       )}
     </div>
   );
