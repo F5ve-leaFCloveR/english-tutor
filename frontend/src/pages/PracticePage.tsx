@@ -18,6 +18,11 @@ export function PracticePage() {
     queryKey: ["due-cards"],
     queryFn: () => api.getDueCards({}),
   });
+  const { data: stats } = useQuery({
+    queryKey: ["stats"],
+    queryFn: () => api.getStats(),
+    staleTime: 60_000,
+  });
 
   const gradeMutation = useMutation({
     mutationFn: async (args: { card_id: string; audio: Blob | null; skip: boolean }) =>
@@ -36,11 +41,20 @@ export function PracticePage() {
 
   const cards = data?.cards ?? [];
   if (cards.length === 0) {
+    const cardsTotal = stats?.cards_total ?? 0;
+    const hasCards = cardsTotal > 0;
     return (
-      <div className="p-8 text-center">
-        <p className="text-slate-600 mb-4">No cards due today.</p>
+      <div className="p-8 text-center max-w-md mx-auto">
+        <p className="text-slate-700 mb-2 font-medium">
+          {hasCards ? "No cards due today." : "No cards yet."}
+        </p>
+        <p className="text-sm text-slate-500 mb-6">
+          {hasCards
+            ? `All ${cardsTotal} card${cardsTotal === 1 ? "" : "s"} are scheduled for later. New cards review +1 day after creation — sleep helps long-term memory.`
+            : "Practice cards are created automatically from your session corrections. Run your first session to get started — cards become reviewable the next day."}
+        </p>
         <button onClick={() => navigate("/")} className="text-blue-600 hover:underline">
-          Run a session
+          {hasCards ? "Back home" : "Run a session"}
         </button>
       </div>
     );
