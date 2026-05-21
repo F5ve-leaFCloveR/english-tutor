@@ -175,3 +175,32 @@ def test_llm_complete_uses_model_override(tmp_path):
 
     call_kwargs = fake_client.chat.completions.create.call_args
     assert call_kwargs.kwargs["model"] == "other-model"
+
+
+def test_llm_complete_passes_max_tokens_when_set(tmp_path):
+    """Regression: evaluator/grader need max_tokens to avoid OpenRouter 402 budget reservation errors."""
+    from tutor.llm import LLMClient
+
+    budget = _make_budget(tmp_path)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _make_response("ok", 10, 5, 0.0001)
+
+    llm = LLMClient(client=fake_client, model="m", budget=budget)
+    llm.complete(messages=[{"role": "user", "content": "hi"}], max_tokens=512)
+
+    call_kwargs = fake_client.chat.completions.create.call_args
+    assert call_kwargs.kwargs.get("max_tokens") == 512
+
+
+def test_llm_complete_omits_max_tokens_when_none(tmp_path):
+    from tutor.llm import LLMClient
+
+    budget = _make_budget(tmp_path)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _make_response("ok", 10, 5, 0.0001)
+
+    llm = LLMClient(client=fake_client, model="m", budget=budget)
+    llm.complete(messages=[{"role": "user", "content": "hi"}])
+
+    call_kwargs = fake_client.chat.completions.create.call_args
+    assert "max_tokens" not in call_kwargs.kwargs

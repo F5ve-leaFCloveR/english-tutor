@@ -46,18 +46,27 @@ class LLMClient:
         )
         return cls(client=client, model=settings.openrouter_model, budget=budget)
 
-    def complete(self, messages: list[dict[str, str]], temperature: float = 0.7, model_override: str | None = None) -> str:
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        model_override: str | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
         self._budget.check_can_spend()
 
         model = model_override or self._model
         last_error: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                response = self._client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                )
+                kwargs: dict[str, Any] = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temperature,
+                }
+                if max_tokens is not None:
+                    kwargs["max_tokens"] = max_tokens
+                response = self._client.chat.completions.create(**kwargs)
                 self._record_usage(response)
                 return response.choices[0].message.content or ""
             except _RETRYABLE as e:

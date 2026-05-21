@@ -41,6 +41,7 @@ class LLMGrader:
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             model_override=self._model,
+            max_tokens=16,
         )
         return self._parse_score(response)
 
