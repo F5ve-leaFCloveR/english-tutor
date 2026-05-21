@@ -117,3 +117,44 @@ def test_list_sessions_service_empty_when_none(tmp_path):
     from tutor.web.services import list_sessions_service
     deps = _make_deps(tmp_path)
     assert list_sessions_service(deps, limit=10) == []
+
+
+def test_end_session_persists_empty_growth_points_when_evaluator_returns_empty(tmp_path, mocker):
+    """Regression: clean sessions (no corrections) must still mark analysis done.
+
+    Frontend distinguishes "analyzing" from "clean" by presence of `growth_points`
+    field. If we never write the field, the page polls forever.
+    """
+    from tutor.web.services import end_session_service, start_session_service, turn_service
+    deps = _make_deps(tmp_path)
+    deps.llm.complete.return_value = "Hi."
+
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    # Add one turn so the evaluator path runs
+    deps.asr.transcribe.return_value = "I work in IT"
+    deps.llm.complete.return_value = "Great."
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+
+    # Patch the Evaluator to return empty growth_points
+    mocker.patch("tutor.web.services.Evaluator").return_value.evaluate.return_value = []
+
+    end_session_service(deps, session_id=s.session_id)
+    final = deps.storage.load_session(s.session_id)
+    assert "growth_points" in final
+    assert final["growth_points"] == []
+    assert final.get("growth_points_error") in (None, "")
+
+
+def test_end_session_persists_empty_growth_points_for_zero_turn_session(tmp_path, mocker):
+    """0-turn session: skipping the evaluator must still mark analysis done."""
+    from tutor.web.services import end_session_service, start_session_service
+    deps = _make_deps(tmp_path)
+    deps.llm.complete.return_value = "Hi."
+
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    # No turns added — go straight to end_session
+    end_session_service(deps, session_id=s.session_id)
+
+    final = deps.storage.load_session(s.session_id)
+    assert "growth_points" in final
+    assert final["growth_points"] == []

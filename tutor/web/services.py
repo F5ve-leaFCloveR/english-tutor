@@ -128,20 +128,25 @@ def end_session_service(deps: Dependencies, session_id: str) -> EndSessionResult
             growth_points_error = f"evaluator failed: {e}"
             deps.storage.set_growth_points_error(session_id, growth_points_error)
 
-        if growth_points:
+        if growth_points_error is None:
             growth_points_dicts = [
                 gp.model_dump() if hasattr(gp, "model_dump") else asdict(gp)
                 for gp in growth_points
             ]
             deps.storage.set_growth_points(session_id, growth_points_dicts)
-            try:
-                cards = deps.srs.create_cards(growth_points, session_id=session_id)
-                cards_created_ids = [c.id for c in cards]
-                deps.storage.set_cards_created(session_id, cards_created_ids)
-            except Exception as e:
-                log.warning("SRS create_cards failed: %s", e)
-                growth_points_error = f"create_cards failed: {e}"
-                deps.storage.set_growth_points_error(session_id, growth_points_error)
+
+            if growth_points:
+                try:
+                    cards = deps.srs.create_cards(growth_points, session_id=session_id)
+                    cards_created_ids = [c.id for c in cards]
+                    deps.storage.set_cards_created(session_id, cards_created_ids)
+                except Exception as e:
+                    log.warning("SRS create_cards failed: %s", e)
+                    growth_points_error = f"create_cards failed: {e}"
+                    deps.storage.set_growth_points_error(session_id, growth_points_error)
+    else:
+        # 0-turn session: nothing to evaluate, but mark analysis done so frontend stops polling
+        deps.storage.set_growth_points(session_id, [])
 
     deps.storage.end_session(session_id)
     final = deps.storage.load_session(session_id)
