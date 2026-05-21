@@ -42,7 +42,7 @@ class LLMClient:
     def from_settings(cls, settings: "Settings", budget: BudgetTracker) -> "LLMClient":
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=settings.openrouter_api_key,
+            api_key=settings.openrouter_api_key.get_secret_value(),
         )
         return cls(client=client, model=settings.openrouter_model, budget=budget)
 

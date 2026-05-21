@@ -42,7 +42,7 @@ def _run_interview(scenario_id: str) -> int:
         daily_token_cap=settings.daily_token_budget,
     )
 
-    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key)
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key.get_secret_value())
     llm = LLMClient(client=client, model=settings.openrouter_model, budget=budget)
     asr = WhisperASR(model_size=settings.whisper_model_size)
     tts = MacSayTTS(voice=settings.tts_voice, rate=settings.tts_rate)
