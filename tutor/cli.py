@@ -19,8 +19,16 @@ from tutor.scenarios.loader import ScenarioNotFoundError, list_scenarios, load_s
 from tutor.session import SessionOrchestrator
 from tutor.settings import get_settings
 from tutor.srs_engine import SRSEngine
+from tutor.stats import StatsCalculator, format_summary
 from tutor.storage import SessionStorage
 from tutor.tts import MacSayTTS
+
+
+def _positive_int(value: str) -> int:
+    iv = int(value)
+    if iv < 1:
+        raise argparse.ArgumentTypeError("--days must be >= 1")
+    return iv
 
 
 def _project_root() -> Path:
@@ -41,6 +49,14 @@ def _build_parser() -> argparse.ArgumentParser:
     sub_review.add_argument("--limit", type=int, default=None, help="Max cards to review")
     sub_review.add_argument("--tag", choices=["vocab", "grammar"], default=None,
                              help="Filter cards by tag")
+
+    sub_stats = sub.add_parser("stats", help="Show progress stats")
+    sub_stats.add_argument(
+        "--days",
+        type=_positive_int,
+        default=None,
+        help="Window for session counts (sessions only, not cards). Must be >= 1.",
+    )
 
     return p
 
@@ -116,6 +132,16 @@ def _run_review(limit: int | None, tag: str | None) -> int:
     return 0
 
 
+def _run_stats(days: int | None) -> int:
+    project_root = _project_root()
+    storage = SessionStorage(root=project_root / "sessions")
+    srs = SRSEngine(path=project_root / "cards.json")
+    calc = StatsCalculator(storage=storage, srs=srs)
+    summary = calc.compute(days=days)
+    print(format_summary(summary, days=days))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     parser = _build_parser()
@@ -129,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "review":
         return _run_review(args.limit, args.tag)
+    if args.command == "stats":
+        return _run_stats(args.days)
     return 1
 
 
