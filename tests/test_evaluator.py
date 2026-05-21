@@ -135,3 +135,41 @@ def test_evaluator_returns_empty_on_llm_error(tmp_path):
     evaluator = Evaluator(llm=llm, model="google/gemini-2.5-pro")
     result = evaluator.evaluate(transcript=[{"role": "user", "content": "x"}])
     assert result == []
+
+
+def test_evaluator_retry_includes_reminder_message(tmp_path):
+    """Regression P5: on retry after parse fail, append a STRICT JSON reminder."""
+    from tutor.evaluator import Evaluator
+    from tutor.llm import LLMClient
+    import json as _json
+    from unittest.mock import MagicMock as _MagicMock
+
+    bad_then_good = [
+        _MagicMock(
+            choices=[_MagicMock(message=_MagicMock(content="not json"))],
+            usage=_MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15, model_extra={}),
+        ),
+        _MagicMock(
+            choices=[_MagicMock(message=_MagicMock(content=_json.dumps({
+                "growth_points": [{"tag": "vocab", "user_utterance": "x",
+                                   "corrected_version": "y", "explanation": "z", "context": None}]
+            })))],
+            usage=_MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15, model_extra={}),
+        ),
+    ]
+    client = _MagicMock()
+    client.chat.completions.create.side_effect = bad_then_good
+    budget = _make_budget(tmp_path)
+    llm = LLMClient(client=client, model="google/gemini-2.5-pro", budget=budget)
+
+    evaluator = Evaluator(llm=llm, model="google/gemini-2.5-pro")
+    evaluator.evaluate(transcript=[{"role": "user", "content": "hi"}])
+
+    # First call: original messages only
+    first_call_messages = client.chat.completions.create.call_args_list[0].kwargs["messages"]
+    # Second call: original messages + reminder
+    second_call_messages = client.chat.completions.create.call_args_list[1].kwargs["messages"]
+    assert len(second_call_messages) == len(first_call_messages) + 1
+    reminder = second_call_messages[-1]
+    assert reminder["role"] == "user"
+    assert "STRICT JSON" in reminder["content"]

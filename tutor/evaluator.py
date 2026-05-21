@@ -61,9 +61,17 @@ class Evaluator:
         ]
 
         last_error: Exception | None = None
+        reminder = {
+            "role": "user",
+            "content": (
+                "Your previous response was not valid JSON. Return STRICT JSON only, "
+                "no commentary, no markdown fences. Just the {\"growth_points\": [...]} object."
+            ),
+        }
         for attempt in range(2):
+            call_messages = messages if attempt == 0 else messages + [reminder]
             try:
-                raw = self._llm.complete(messages=messages, temperature=0.2, model_override=self._model)
+                raw = self._llm.complete(messages=call_messages, temperature=0.2, model_override=self._model)
             except Exception as e:
                 log.warning("Evaluator LLM call failed: %s", e)
                 return []
