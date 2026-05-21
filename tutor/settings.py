@@ -13,6 +13,14 @@ class Settings(BaseSettings):
 
     openrouter_api_key: SecretStr = Field(..., description="OpenRouter API key")
     openrouter_model: str = Field(default="google/gemini-2.5-flash")
+    openrouter_evaluator_model: str = Field(
+        default="google/gemini-2.5-pro",
+        description="Stronger model for post-session evaluation",
+    )
+    openrouter_grader_model: str = Field(
+        default="google/gemini-2.5-flash",
+        description="Cheap model for grading SRS card recall (0-5)",
+    )
     daily_usd_budget: float = Field(default=0.5, gt=0)
     daily_token_budget: int = Field(default=200_000, gt=0)
     per_session_turn_limit: int = Field(default=25, gt=0)

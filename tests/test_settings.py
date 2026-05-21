@@ -9,6 +9,8 @@ def test_settings_loads_api_key(monkeypatch):
     s = Settings()
     assert s.openrouter_api_key.get_secret_value() == "sk-or-v1-test"
     assert s.openrouter_model == "google/gemini-2.5-flash"
+    assert s.openrouter_evaluator_model == "google/gemini-2.5-pro"
+    assert s.openrouter_grader_model == "google/gemini-2.5-flash"
     assert s.daily_usd_budget == 0.5
     assert s.daily_token_budget == 200_000
     assert s.per_session_turn_limit == 25
