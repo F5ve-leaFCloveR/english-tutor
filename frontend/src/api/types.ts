@@ -106,8 +106,7 @@ export interface EndSessionAccepted {
 }
 
 export const OPENAI_TTS_VOICES = [
-  "alloy", "echo", "fable", "onyx", "nova", "shimmer",
-  "ash", "ballad", "coral", "sage", "verse", "marin", "cedar",
+  "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar",
 ] as const;
 
 export type OpenAITTSVoice = typeof OPENAI_TTS_VOICES[number];

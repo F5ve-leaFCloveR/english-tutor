@@ -97,6 +97,6 @@ describe("useTTS", () => {
   it("exposes static OPENAI_TTS_VOICES as voices", () => {
     const { result } = renderHook(() => useTTS());
     expect(result.current.voices).toContain("alloy");
-    expect(result.current.voices.length).toBe(13);
+    expect(result.current.voices.length).toBe(10);
   });
 });

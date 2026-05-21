@@ -15,7 +15,7 @@ beforeEach(() => {
 });
 
 vi.mock("../hooks/useTTS", () => ({
-  useTTS: () => ({ speak: vi.fn(), isSpeaking: false, voices: ["alloy", "nova", "echo"] }),
+  useTTS: () => ({ speak: vi.fn(), isSpeaking: false, voices: ["alloy", "ash", "echo"] }),
 }));
 
 describe("VoicePicker", () => {
@@ -24,14 +24,14 @@ describe("VoicePicker", () => {
     const sel = screen.getByRole("combobox") as HTMLSelectElement;
     const options = Array.from(sel.options).map(o => o.value);
     expect(options).toContain("alloy");
-    expect(options).toContain("nova");
+    expect(options).toContain("ash");
   });
 
   it("persists choice to localStorage on change", () => {
     render(<VoicePicker />);
     const sel = screen.getByRole("combobox");
-    fireEvent.change(sel, { target: { value: "nova" } });
-    expect(localStorage.getItem("ttsVoice")).toBe("nova");
+    fireEvent.change(sel, { target: { value: "ash" } });
+    expect(localStorage.getItem("ttsVoice")).toBe("ash");
   });
 
   it("renders Test button", () => {
