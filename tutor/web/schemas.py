@@ -76,3 +76,25 @@ class EndSessionAccepted(BaseModel):
 
 class SessionListResult(BaseModel):
     sessions: list[dict]
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatRequest(BaseModel):
+    history: list[ChatMessage] = []
+    message: str
+
+
+class ChatCorrectionDict(BaseModel):
+    tag: Literal["vocab", "grammar"]
+    user_utterance: str
+    corrected_version: str
+    explanation: str
+
+
+class ChatResponseDict(BaseModel):
+    reply: str
+    corrections: list[ChatCorrectionDict]

@@ -25,6 +25,7 @@ class Dependencies:
     grader_model: str
     tts_model: str
     tts_voice: str
+    chat_model: str = ""
 
 
 def build_dependencies(project_root: Path) -> Dependencies:
@@ -52,4 +53,7 @@ def build_dependencies(project_root: Path) -> Dependencies:
         grader_model=settings.openrouter_grader_model,
         tts_model=settings.tts_model,
         tts_voice=settings.tts_voice,
+        # Free-chat shares the conversational model (settings.openrouter_model).
+        # No separate env var: keep things lean until we need a distinct chat model.
+        chat_model=settings.openrouter_model,
     )

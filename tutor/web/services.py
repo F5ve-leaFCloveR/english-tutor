@@ -230,3 +230,16 @@ def list_sessions_service(deps: Dependencies, limit: int = 10) -> list[dict]:
     all_sessions = deps.storage.list_sessions()
     ended = [s for s in all_sessions if s.get("ended_at")]
     return ended[:limit]
+
+
+def chat_service(
+    deps: Dependencies,
+    history: list[dict[str, str]],
+    message: str,
+) -> dict:
+    """Stateless free-chat turn: returns {reply, corrections} via one LLM call."""
+    from tutor.conversation import ChatTurn
+
+    chat = ChatTurn(llm=deps.llm, model=deps.chat_model)
+    response = chat.respond(history=history, message=message)
+    return response.model_dump()

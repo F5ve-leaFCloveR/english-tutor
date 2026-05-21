@@ -14,6 +14,8 @@ from tutor.web.deps import Dependencies, build_dependencies
 from tutor.web.errors import register_exception_handlers
 from tutor.web.schemas import (
     BudgetSummary,
+    ChatRequest,
+    ChatResponseDict,
     DueCardsResult,
     EndSessionAccepted,
     EndSessionResult,
@@ -138,6 +140,13 @@ def create_app(deps: Dependencies | None = None) -> FastAPI:
     async def synthesize_tts(req: TTSRequest):
         audio = tts_service.synthesize(req.text, voice=req.voice)
         return Response(content=audio, media_type="audio/wav")
+
+    @app.post("/api/chat", response_model=ChatResponseDict)
+    async def chat(req: ChatRequest, d: Dependencies = Depends(get_deps)):
+        if not req.message.strip():
+            raise HTTPException(status_code=422, detail="message is required")
+        history = [{"role": m.role, "content": m.content} for m in req.history]
+        return services.chat_service(d, history=history, message=req.message)
 
     # Static frontend assets + catch-all for React Router
     static_dir = _default_project_root() / "tutor" / "web" / "static"
