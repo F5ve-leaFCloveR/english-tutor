@@ -215,3 +215,10 @@ def budget_service(deps: Dependencies) -> BudgetSummary:
         daily_usd_cap=deps.budget.daily_usd_cap,
         daily_token_cap=deps.budget.daily_token_cap,
     )
+
+
+def list_sessions_service(deps: Dependencies, limit: int = 10) -> list[dict]:
+    """Return up to `limit` ended sessions, latest first."""
+    all_sessions = deps.storage.list_sessions()
+    ended = [s for s in all_sessions if s.get("ended_at")]
+    return ended[:limit]
