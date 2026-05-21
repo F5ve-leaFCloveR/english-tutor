@@ -132,3 +132,167 @@ def test_session_builds_system_prompt_once(tmp_path, mocker):
     messages = first_call.kwargs.get("messages") or first_call.args[0]
     assert messages[0]["role"] == "system"
     assert "Russian" in messages[0]["content"]
+
+
+def test_session_runs_evaluator_and_creates_cards(tmp_path, mocker):
+    from tutor.session import SessionOrchestrator
+    from tutor.storage import SessionStorage
+    from tutor.scenarios.loader import load_scenario
+    from tutor.evaluator import GrowthPoint
+
+    mocker.patch("builtins.input", side_effect=["go", "end"])
+    llm, asr, tts, recorder = _stub_adapters(
+        turn_user_texts=["I made a project."],
+        turn_llm_replies=["Opening line.", "What project?"],
+    )
+
+    fake_evaluator = MagicMock()
+    fake_evaluator.evaluate.return_value = [
+        GrowthPoint(tag="vocab", user_utterance="I made a project.",
+                    corrected_version="I led a project.",
+                    explanation="Led signals ownership.", context=None),
+    ]
+    fake_srs = MagicMock()
+    fake_card = MagicMock()
+    fake_card.id = "card_xyz"
+    fake_srs.create_cards.return_value = [fake_card]
+
+    storage = SessionStorage(root=tmp_path)
+    orch = SessionOrchestrator(
+        llm=llm, asr=asr, tts=tts, recorder=recorder, storage=storage,
+        scenario=load_scenario("tech_interview_behavioral"),
+        per_session_turn_limit=25,
+        evaluator=fake_evaluator,
+        srs_engine=fake_srs,
+    )
+    session_id = orch.run()
+
+    fake_evaluator.evaluate.assert_called_once()
+    fake_srs.create_cards.assert_called_once()
+    data = storage.load_session(session_id)
+    assert data["growth_points"] == [
+        {"tag": "vocab", "user_utterance": "I made a project.",
+         "corrected_version": "I led a project.", "explanation": "Led signals ownership.",
+         "context": None}
+    ]
+    assert data["cards_created"] == ["card_xyz"]
+
+
+def test_session_evaluator_returns_empty_no_cards_created(tmp_path, mocker):
+    """If evaluator returns empty list (parse fail / API error), session ends cleanly without cards."""
+    from tutor.session import SessionOrchestrator
+    from tutor.storage import SessionStorage
+    from tutor.scenarios.loader import load_scenario
+
+    # One turn happens, then end
+    mocker.patch("builtins.input", side_effect=["", "end"])
+    llm, asr, tts, recorder = _stub_adapters(
+        turn_user_texts=["hi"],
+        turn_llm_replies=["Opening.", "Reply."],
+    )
+
+    fake_evaluator = MagicMock()
+    fake_evaluator.evaluate.return_value = []  # eval failed silently
+    fake_srs = MagicMock()
+
+    storage = SessionStorage(root=tmp_path)
+    orch = SessionOrchestrator(
+        llm=llm, asr=asr, tts=tts, recorder=recorder, storage=storage,
+        scenario=load_scenario("tech_interview_behavioral"),
+        per_session_turn_limit=25,
+        evaluator=fake_evaluator,
+        srs_engine=fake_srs,
+    )
+    session_id = orch.run()
+    data = storage.load_session(session_id)
+    assert data["ended_at"] is not None
+    fake_evaluator.evaluate.assert_called_once()
+    fake_srs.create_cards.assert_not_called()
+
+
+def test_session_works_without_evaluator(tmp_path, mocker):
+    """Backwards compatible: evaluator and srs_engine are optional."""
+    from tutor.session import SessionOrchestrator
+    from tutor.storage import SessionStorage
+    from tutor.scenarios.loader import load_scenario
+
+    mocker.patch("builtins.input", side_effect=["end"])
+    llm, asr, tts, recorder = _stub_adapters(
+        turn_user_texts=[],
+        turn_llm_replies=["Hi."],
+    )
+
+    storage = SessionStorage(root=tmp_path)
+    orch = SessionOrchestrator(
+        llm=llm, asr=asr, tts=tts, recorder=recorder, storage=storage,
+        scenario=load_scenario("tech_interview_behavioral"),
+        per_session_turn_limit=25,
+    )
+    session_id = orch.run()
+    data = storage.load_session(session_id)
+    assert data["ended_at"] is not None
+    assert "growth_points" not in data
+
+
+def test_session_opening_budget_exhausted_exits_cleanly(tmp_path, mocker, capsys):
+    """Regression (polish): opening LLM call BudgetExceededError must not produce a traceback."""
+    from tutor.session import SessionOrchestrator
+    from tutor.storage import SessionStorage
+    from tutor.scenarios.loader import load_scenario
+    from tutor.budget import BudgetExceededError
+
+    mocker.patch("builtins.input", side_effect=[])  # input never called
+    llm, asr, tts, recorder = _stub_adapters(
+        turn_user_texts=[],
+        turn_llm_replies=[BudgetExceededError("daily cap already hit before opening")],
+    )
+
+    storage = SessionStorage(root=tmp_path)
+    orch = SessionOrchestrator(
+        llm=llm, asr=asr, tts=tts, recorder=recorder, storage=storage,
+        scenario=load_scenario("tech_interview_behavioral"),
+        per_session_turn_limit=25,
+    )
+    session_id = orch.run()
+    data = storage.load_session(session_id)
+    assert data["ended_at"] is not None
+    captured = capsys.readouterr()
+    assert "budget" in captured.out.lower()
+    assert "Traceback" not in captured.out
+
+
+def test_session_cleans_up_temp_wavs(tmp_path, mocker):
+    """Regression (polish): temp WAV files created during session must be removed in finally."""
+    from tutor.session import SessionOrchestrator
+    from tutor.storage import SessionStorage
+    from tutor.scenarios.loader import load_scenario
+    import os, tempfile, glob
+
+    # Snapshot of existing tutor_turn_* files before the test
+    pattern = os.path.join(tempfile.gettempdir(), "tutor_turn_*.wav")
+    before = set(glob.glob(pattern))
+
+    mocker.patch("builtins.input", side_effect=["", "", "end"])
+    llm, asr, tts, recorder = _stub_adapters(
+        turn_user_texts=["hi", "hello"],
+        turn_llm_replies=["Opening.", "R1.", "R2."],
+    )
+
+    # Make recorder actually create the file so cleanup has something to remove
+    def real_create(path):
+        from pathlib import Path
+        Path(path).write_bytes(b"")
+        return path
+    recorder.record_to_wav.side_effect = real_create
+
+    storage = SessionStorage(root=tmp_path)
+    orch = SessionOrchestrator(
+        llm=llm, asr=asr, tts=tts, recorder=recorder, storage=storage,
+        scenario=load_scenario("tech_interview_behavioral"),
+        per_session_turn_limit=25,
+    )
+    orch.run()
+
+    after = set(glob.glob(pattern))
+    new_files = after - before
+    assert new_files == set(), f"orphan temp WAVs left: {new_files}"
