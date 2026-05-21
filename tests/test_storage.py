@@ -173,3 +173,24 @@ def test_storage_list_sessions_empty_when_no_sessions(tmp_path):
 
     storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
     assert storage.list_sessions() == []
+
+
+def test_storage_create_session_no_opening_text_by_default(tmp_path):
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    session_id = storage.create_session("tech_interview_behavioral")
+    data = storage.load_session(session_id)
+    assert data.get("opening_text") is None
+
+
+def test_storage_set_opening_text_persists(tmp_path):
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    session_id = storage.create_session("tech_interview_behavioral")
+    storage.set_opening_text(session_id, "Hi, tell me about a project.")
+    data = storage.load_session(session_id)
+    assert data["opening_text"] == "Hi, tell me about a project."

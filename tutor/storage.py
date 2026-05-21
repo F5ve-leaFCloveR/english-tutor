@@ -53,6 +53,7 @@ class SessionStorage:
             "scenario_id": scenario_id,
             "started_at": now.isoformat(),
             "ended_at": None,
+            "opening_text": None,
             "turns": [],
         })
         return session_id
@@ -89,6 +90,12 @@ class SessionStorage:
         path = self._find_session_path(session_id)
         data = json.loads(path.read_text())
         data["cards_created"] = card_ids
+        self._write(path, data)
+
+    def set_opening_text(self, session_id: str, text: str) -> None:
+        path = self._find_session_path(session_id)
+        data = json.loads(path.read_text())
+        data["opening_text"] = text
         self._write(path, data)
 
     def load_session(self, session_id: str) -> dict:
