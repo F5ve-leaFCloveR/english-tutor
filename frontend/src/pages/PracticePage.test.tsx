@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReviewPage } from "./ReviewPage";
+import { PracticePage } from "./PracticePage";
 
 vi.mock("../api/client", () => ({
   api: {
@@ -22,9 +22,9 @@ function wrap(node: React.ReactNode) {
   );
 }
 
-describe("ReviewPage", () => {
+describe("PracticePage", () => {
   it("shows empty state when no due cards", async () => {
-    render(wrap(<ReviewPage />));
+    render(wrap(<PracticePage />));
     await waitFor(() => {
       expect(screen.getByText(/no cards due/i)).toBeInTheDocument();
     });

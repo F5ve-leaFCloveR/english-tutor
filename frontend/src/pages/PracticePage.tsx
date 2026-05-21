@@ -7,7 +7,7 @@ import { ReviewCard } from "../components/ReviewCard";
 import { useRecorder } from "../hooks/useRecorder";
 import { useTTS } from "../hooks/useTTS";
 
-export function ReviewPage() {
+export function PracticePage() {
   const navigate = useNavigate();
   const recorder = useRecorder();
   const tts = useTTS();
