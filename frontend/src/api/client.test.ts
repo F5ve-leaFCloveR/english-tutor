@@ -75,6 +75,18 @@ describe("api client", () => {
     expect(r.session_id).toBe("s1");
     expect(r.status).toBe("processing");
   });
+
+  it("getSessions returns array of sessions", async () => {
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ sessions: [{ session_id: "s1", turns: [] }] }),
+    });
+    const sessions = await api.getSessions(5);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].session_id).toBe("s1");
+    const call = ((globalThis as any).fetch as any).mock.calls[0];
+    expect(call[0]).toBe("/api/sessions?limit=5");
+  });
 });
 
 afterAll(() => {

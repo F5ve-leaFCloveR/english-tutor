@@ -111,4 +111,9 @@ export const api = {
   getBudget(): Promise<BudgetSummary> {
     return request("/api/budget");
   },
+
+  async getSessions(limit: number = 10): Promise<SessionData[]> {
+    const data = await request<{ sessions: SessionData[] }>(`/api/sessions?limit=${limit}`);
+    return data.sessions;
+  },
 };
