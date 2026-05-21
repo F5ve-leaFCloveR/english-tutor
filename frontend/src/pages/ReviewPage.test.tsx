@@ -105,4 +105,27 @@ describe("ReviewPage", () => {
       expect(screen.getByText(/no corrections found/i)).toBeInTheDocument();
     });
   });
+
+  it("shows error banner when growth_points_error is set", async () => {
+    vi.resetModules();
+    vi.doMock("../api/client", () => ({
+      api: {
+        getSessions: vi.fn().mockResolvedValue([{
+          session_id: "s1",
+          scenario_id: "x",
+          started_at: "2026-05-21T10:00:00",
+          ended_at: "2026-05-21T10:15:00",
+          opening_text: "Hi.",
+          turns: [{ ts: "...", user_text: "hello", llm_text: "hi" }],
+          growth_points_error: "rate_limit",
+        }]),
+      },
+      ApiError: class extends Error {},
+    }));
+    const { ReviewPage: Page } = await import("./ReviewPage");
+    render(wrap(<Page />));
+    await waitFor(() => {
+      expect(screen.getByText(/analysis failed: rate_limit/i)).toBeInTheDocument();
+    });
+  });
 });
