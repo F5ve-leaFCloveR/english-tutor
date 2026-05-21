@@ -114,16 +114,44 @@ def test_post_turn_empty_asr_422(tmp_path, mocker):
     assert r2.json()["error"] == "no_speech_detected"
 
 
-def test_post_end_no_turns_skips_evaluator(tmp_path, mocker):
+def test_post_end_no_turns_returns_accepted(tmp_path, mocker):
     client, _ = _client(tmp_path, mocker)
     r = client.post("/api/sessions", json={"scenario_id": "tech_interview_behavioral"})
     sid = r.json()["session_id"]
     r2 = client.post(f"/api/sessions/{sid}/end")
-    assert r2.status_code == 200
+    assert r2.status_code == 202
     body = r2.json()
     assert body["session_id"] == sid
-    assert body["growth_points"] == []
-    assert body["cards_created"] == []
+    assert body["status"] == "processing"
+
+
+def test_post_end_runs_background_task(tmp_path, mocker):
+    client, deps = _client(tmp_path, mocker)
+    deps.llm.complete.return_value = "Hi."
+    deps.asr.transcribe.return_value = "I did stuff"
+
+    r = client.post("/api/sessions", json={"scenario_id": "tech_interview_behavioral"})
+    sid = r.json()["session_id"]
+
+    import io
+    files = {"audio": ("turn.webm", io.BytesIO(b"audio"), "audio/webm")}
+    client.post(f"/api/sessions/{sid}/turn", files=files)
+
+    called_with = {}
+    def fake_end(deps_, session_id):
+        called_with["session_id"] = session_id
+    mocker.patch("tutor.web.api.services.end_session_service", side_effect=fake_end)
+
+    r2 = client.post(f"/api/sessions/{sid}/end")
+    assert r2.status_code == 202
+    # TestClient runs BackgroundTasks before returning control
+    assert called_with["session_id"] == sid
+
+
+def test_post_end_unknown_session_still_404(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    r = client.post("/api/sessions/does_not_exist/end")
+    assert r.status_code == 404
 
 
 def test_get_review_due_returns_empty_initially(tmp_path, mocker):

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from tutor.web import services
@@ -15,6 +15,7 @@ from tutor.web.errors import register_exception_handlers
 from tutor.web.schemas import (
     BudgetSummary,
     DueCardsResult,
+    EndSessionAccepted,
     EndSessionResult,
     GradeResult,
     StartSessionRequest,
@@ -84,9 +85,17 @@ def create_app(deps: Dependencies | None = None) -> FastAPI:
         audio_bytes = await audio.read()
         return services.turn_service(d, session_id=session_id, audio_bytes=audio_bytes)
 
-    @app.post("/api/sessions/{session_id}/end", response_model=EndSessionResult)
-    async def end_session(session_id: str, d: Dependencies = Depends(get_deps)):
-        return services.end_session_service(d, session_id=session_id)
+    @app.post("/api/sessions/{session_id}/end",
+              response_model=EndSessionAccepted, status_code=202)
+    async def end_session(
+        session_id: str,
+        background_tasks: BackgroundTasks,
+        d: Dependencies = Depends(get_deps),
+    ):
+        # Validate session exists synchronously (so 404 fires before scheduling)
+        services.get_session_service(d, session_id)
+        background_tasks.add_task(services.end_session_service, d, session_id)
+        return EndSessionAccepted(session_id=session_id)
 
     @app.get("/api/review/due", response_model=DueCardsResult)
     async def review_due(
