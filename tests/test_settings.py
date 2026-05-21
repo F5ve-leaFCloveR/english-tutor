@@ -13,6 +13,8 @@ def test_settings_loads_api_key(monkeypatch):
     assert s.daily_token_budget == 200_000
     assert s.per_session_turn_limit == 25
     assert s.whisper_model_size == "small"
+    assert s.tts_voice == "Samantha"
+    assert s.tts_rate == 180
 
 
 def test_settings_raises_without_api_key(monkeypatch):

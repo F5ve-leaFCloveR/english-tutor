@@ -45,7 +45,7 @@ def _run_interview(scenario_id: str) -> int:
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key)
     llm = LLMClient(client=client, model=settings.openrouter_model, budget=budget)
     asr = WhisperASR(model_size=settings.whisper_model_size)
-    tts = MacSayTTS()
+    tts = MacSayTTS(voice=settings.tts_voice, rate=settings.tts_rate)
     recorder = AudioRecorder()
     storage = SessionStorage(root=project_root / "sessions")
     scenario = load_scenario(scenario_id)

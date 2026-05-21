@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     daily_token_budget: int = Field(default=200_000, gt=0)
     per_session_turn_limit: int = Field(default=25, gt=0)
     whisper_model_size: str = Field(default="small")
+    tts_voice: str = Field(default="Samantha", description="macOS `say` voice name (run `say -v '?'` to list)")
+    tts_rate: int = Field(default=180, gt=0)
 
     @field_validator("openrouter_api_key")
     @classmethod
