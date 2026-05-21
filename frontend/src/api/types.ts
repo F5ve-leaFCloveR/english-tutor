@@ -110,3 +110,20 @@ export const OPENAI_TTS_VOICES = [
 ] as const;
 
 export type OpenAITTSVoice = typeof OPENAI_TTS_VOICES[number];
+
+export interface ChatMessageDict {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatCorrectionDict {
+  tag: "vocab" | "grammar";
+  user_utterance: string;
+  corrected_version: string;
+  explanation: string;
+}
+
+export interface ChatResponseDict {
+  reply: string;
+  corrections: ChatCorrectionDict[];
+}

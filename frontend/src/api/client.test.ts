@@ -87,6 +87,24 @@ describe("api client", () => {
     const call = ((globalThis as any).fetch as any).mock.calls[0];
     expect(call[0]).toBe("/api/sessions?limit=5");
   });
+
+  it("chat posts history and message, returns reply + corrections", async () => {
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        reply: "ok",
+        corrections: [{ tag: "grammar", user_utterance: "a", corrected_version: "b", explanation: "e" }],
+      }),
+    });
+    const res = await api.chat([{ role: "user", content: "hi" }], "I goed");
+    expect(res.reply).toBe("ok");
+    expect(res.corrections).toHaveLength(1);
+    const call = ((globalThis as any).fetch as any).mock.calls[0];
+    expect(call[0]).toBe("/api/chat");
+    const body = JSON.parse(call[1].body);
+    expect(body.history).toEqual([{ role: "user", content: "hi" }]);
+    expect(body.message).toBe("I goed");
+  });
 });
 
 afterAll(() => {

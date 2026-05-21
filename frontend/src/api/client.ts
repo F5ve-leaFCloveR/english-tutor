@@ -1,5 +1,7 @@
 import type {
   BudgetSummary,
+  ChatMessageDict,
+  ChatResponseDict,
   DueCardsResult,
   EndSessionAccepted,
   GradeResult,
@@ -115,5 +117,13 @@ export const api = {
   async getSessions(limit: number = 10): Promise<SessionData[]> {
     const data = await request<{ sessions: SessionData[] }>(`/api/sessions?limit=${limit}`);
     return data.sessions;
+  },
+
+  chat(history: ChatMessageDict[], message: string): Promise<ChatResponseDict> {
+    return request<ChatResponseDict>("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ history, message }),
+    });
   },
 };
