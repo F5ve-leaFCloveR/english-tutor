@@ -21,11 +21,18 @@ class Settings(BaseSettings):
         default="google/gemini-2.5-flash",
         description="Cheap model for grading SRS card recall (0-5)",
     )
+    tts_model: str = Field(
+        default="openai/gpt-audio-mini",
+        description="OpenRouter TTS model for backend speech synthesis",
+    )
+    tts_voice: str = Field(
+        default="alloy",
+        description="Default TTS voice (overridable per request via /api/tts body)",
+    )
     daily_usd_budget: float = Field(default=0.5, gt=0)
     daily_token_budget: int = Field(default=200_000, gt=0)
     per_session_turn_limit: int = Field(default=25, gt=0)
     whisper_model_size: str = Field(default="small")
-    tts_voice: str = Field(default="Samantha", description="macOS `say` voice name (run `say -v '?'` to list)")
     tts_rate: int = Field(default=180, gt=0)
 
     @field_validator("openrouter_api_key", mode="before")
