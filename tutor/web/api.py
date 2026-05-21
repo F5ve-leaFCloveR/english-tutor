@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from tutor.web import services
@@ -18,6 +18,7 @@ from tutor.web.schemas import (
     EndSessionAccepted,
     EndSessionResult,
     GradeResult,
+    SessionListResult,
     StartSessionRequest,
     StartSessionResult,
     TTSRequest,
@@ -71,6 +72,13 @@ def create_app(deps: Dependencies | None = None) -> FastAPI:
     @app.post("/api/sessions", response_model=StartSessionResult)
     async def start_session(req: StartSessionRequest, d: Dependencies = Depends(get_deps)):
         return services.start_session_service(d, scenario_id=req.scenario_id)
+
+    @app.get("/api/sessions", response_model=SessionListResult)
+    async def list_sessions(
+        limit: int = Query(default=10, ge=1, le=50),
+        d: Dependencies = Depends(get_deps),
+    ):
+        return SessionListResult(sessions=services.list_sessions_service(d, limit=limit))
 
     @app.get("/api/sessions/{session_id}")
     async def get_session(session_id: str, d: Dependencies = Depends(get_deps)):

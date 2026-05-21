@@ -226,3 +226,37 @@ def test_post_tts_uses_voice_from_request(tmp_path, mocker):
     client.post("/api/tts", json={"text": "hi", "voice": "nova"})
     # Voice was passed either as kw or positional
     assert spy.call_args.kwargs.get("voice") == "nova" or "nova" in spy.call_args.args
+
+
+def test_get_sessions_returns_ended_only(tmp_path, mocker):
+    client, deps = _client(tmp_path, mocker)
+    deps.llm.complete.return_value = "Hi."
+
+    # Start two sessions, end only the first
+    r1 = client.post("/api/sessions", json={"scenario_id": "tech_interview_behavioral"})
+    sid1 = r1.json()["session_id"]
+    client.post(f"/api/sessions/{sid1}/end")
+
+    r2 = client.post("/api/sessions", json={"scenario_id": "tech_interview_behavioral"})
+    sid2 = r2.json()["session_id"]
+    # do NOT end sid2
+
+    r = client.get("/api/sessions?limit=10")
+    assert r.status_code == 200
+    ids = [s["session_id"] for s in r.json()["sessions"]]
+    assert sid1 in ids
+    assert sid2 not in ids
+
+
+def test_get_sessions_default_limit(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    r = client.get("/api/sessions")
+    assert r.status_code == 200
+    # default limit is 10; empty store yields 0
+    assert r.json()["sessions"] == []
+
+
+def test_get_sessions_limit_clamped_to_50(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    r = client.get("/api/sessions?limit=999")
+    assert r.status_code == 422  # pydantic validation rejects >50

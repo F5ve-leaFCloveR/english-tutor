@@ -72,3 +72,7 @@ class TTSRequest(BaseModel):
 class EndSessionAccepted(BaseModel):
     session_id: str
     status: Literal["processing"] = "processing"
+
+
+class SessionListResult(BaseModel):
+    sessions: list[dict]
