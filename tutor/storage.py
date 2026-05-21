@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,3 +94,19 @@ class SessionStorage:
     def load_session(self, session_id: str) -> dict:
         path = self._find_session_path(session_id)
         return json.loads(path.read_text())
+
+    def list_sessions(self) -> list[dict]:
+        """Return all session JSONs sorted by started_at descending.
+        Skips and logs files that fail to parse."""
+        out: list[dict] = []
+        if not self.root.exists():
+            return out
+        for path in self.root.rglob("*.json"):
+            try:
+                data = json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError) as e:
+                log.warning("Skipping corrupt session file %s: %s", path, e)
+                continue
+            out.append(data)
+        out.sort(key=lambda d: d.get("started_at", ""), reverse=True)
+        return out

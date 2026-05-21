@@ -127,3 +127,49 @@ def test_storage_persists_cards_created(tmp_path):
     storage.set_cards_created(session_id, ["card_abc12345", "card_def67890"])
     data = storage.load_session(session_id)
     assert data["cards_created"] == ["card_abc12345", "card_def67890"]
+
+
+def test_storage_list_sessions_returns_all_sorted(tmp_path):
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+
+    times = [
+        datetime(2026, 5, 19, 9, 0),
+        datetime(2026, 5, 21, 14, 0),
+        datetime(2026, 5, 20, 11, 0),
+    ]
+    for t in times:
+        s = SessionStorage(root=tmp_path, now=lambda t=t: t)
+        s.create_session("tech_interview_behavioral")
+
+    reader = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 15, 0))
+    sessions = reader.list_sessions()
+    assert len(sessions) == 3
+    started_dates = [s["started_at"][:10] for s in sessions]
+    assert started_dates == ["2026-05-21", "2026-05-20", "2026-05-19"]
+
+
+def test_storage_list_sessions_skips_corrupt_files(tmp_path, caplog):
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+    import logging
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    storage.create_session("tech_interview_behavioral")
+
+    corrupt = tmp_path / "2026-05-21" / "corrupt_id.json"
+    corrupt.write_text("{ not json")
+
+    with caplog.at_level(logging.WARNING):
+        sessions = storage.list_sessions()
+    assert len(sessions) == 1
+    assert any("corrupt_id" in r.message or "corrupt" in r.message.lower()
+               for r in caplog.records)
+
+
+def test_storage_list_sessions_empty_when_no_sessions(tmp_path):
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    assert storage.list_sessions() == []
