@@ -62,3 +62,13 @@ class BudgetSummary(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     message: str | None = None
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+    voice: str | None = None
+
+
+class EndSessionAccepted(BaseModel):
+    session_id: str
+    status: Literal["processing"] = "processing"

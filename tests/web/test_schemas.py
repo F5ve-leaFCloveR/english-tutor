@@ -31,3 +31,19 @@ def test_grade_result_schema():
     g = GradeResult(card_id="c1", user_attempt_text="x", quality=4,
                     target="y", explanation="z", next_due="2026-05-22")
     assert g.quality == 4
+
+
+def test_tts_request_schema():
+    from tutor.web.schemas import TTSRequest
+    import pytest as _p
+    TTSRequest(text="hello")
+    TTSRequest(text="hello", voice="alloy")
+    with _p.raises(Exception):
+        TTSRequest(text="")  # min_length=1
+
+
+def test_end_session_accepted_schema():
+    from tutor.web.schemas import EndSessionAccepted
+    r = EndSessionAccepted(session_id="abc12345")
+    assert r.status == "processing"
+    assert r.session_id == "abc12345"
