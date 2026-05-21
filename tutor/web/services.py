@@ -104,26 +104,31 @@ def end_session_service(deps: Dependencies, session_id: str) -> EndSessionResult
     except FileNotFoundError as e:
         raise SessionNotFoundError(session_id) from e
 
+    # Set ended_at FIRST so the session immediately appears in /review (as Analyzing).
+    # The evaluator below may take several seconds; without this, /review filters
+    # the session out until the evaluator completes.
+    deps.storage.end_session(session_id)
+
     turns = session_data.get("turns", [])
     growth_points_dicts: list[dict] = []
     cards_created_ids: list[str] = []
     growth_points_error: str | None = None
 
     if turns:
-        scenario = load_scenario(session_data["scenario_id"])
-        system_prompt = build_system_prompt(scenario, user_native_language="Russian")
-        history: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-        if session_data.get("opening_text"):
-            history.append({"role": "assistant", "content": session_data["opening_text"]})
-        for turn in turns:
-            history.append({"role": "user", "content": turn["user_text"]})
-            history.append({"role": "assistant", "content": turn["llm_text"]})
-
         try:
+            scenario = load_scenario(session_data["scenario_id"])
+            system_prompt = build_system_prompt(scenario, user_native_language="Russian")
+            history: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+            if session_data.get("opening_text"):
+                history.append({"role": "assistant", "content": session_data["opening_text"]})
+            for turn in turns:
+                history.append({"role": "user", "content": turn["user_text"]})
+                history.append({"role": "assistant", "content": turn["llm_text"]})
+
             evaluator = Evaluator(llm=deps.llm, model=deps.evaluator_model)
             growth_points = evaluator.evaluate(transcript=history)
         except Exception as e:
-            log.warning("Evaluator raised: %s", e)
+            log.warning("Evaluator pipeline raised: %s", e)
             growth_points = []
             growth_points_error = f"evaluator failed: {e}"
             deps.storage.set_growth_points_error(session_id, growth_points_error)
@@ -145,12 +150,10 @@ def end_session_service(deps: Dependencies, session_id: str) -> EndSessionResult
                     growth_points_error = f"create_cards failed: {e}"
                     deps.storage.set_growth_points_error(session_id, growth_points_error)
     else:
-        # 0-turn session: nothing to evaluate, but mark analysis done so frontend stops polling
+        # 0-turn session: nothing to evaluate, but mark analysis done so /review doesn't poll forever
         deps.storage.set_growth_points(session_id, [])
 
-    deps.storage.end_session(session_id)
     final = deps.storage.load_session(session_id)
-
     return EndSessionResult(
         session_id=session_id,
         ended_at=final.get("ended_at"),

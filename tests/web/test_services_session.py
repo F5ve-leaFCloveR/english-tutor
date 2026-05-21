@@ -158,3 +158,59 @@ def test_end_session_persists_empty_growth_points_for_zero_turn_session(tmp_path
     final = deps.storage.load_session(s.session_id)
     assert "growth_points" in final
     assert final["growth_points"] == []
+
+
+def test_end_session_sets_ended_at_before_evaluator_runs(tmp_path, mocker):
+    """Regression: frontend shows just-ended session as 'Analyzing' immediately.
+
+    If `storage.end_session(id)` is called AFTER the evaluator, the session is
+    invisible in /review during the evaluator's 5-10s run. We want the session
+    to appear as soon as it ends — with growth_points still missing — so /review
+    shows the Analyzing state, then transitions to ready.
+    """
+    from tutor.web.services import end_session_service, start_session_service, turn_service
+    deps = _make_deps(tmp_path)
+
+    deps.llm.complete.return_value = "Hi."
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    deps.asr.transcribe.return_value = "I work in IT"
+    deps.llm.complete.return_value = "Great."
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+
+    # Capture storage state at the moment the evaluator runs
+    captured = {}
+    def fake_evaluate(transcript):
+        snapshot = deps.storage.load_session(s.session_id)
+        captured["ended_at"] = snapshot.get("ended_at")
+        return []
+    mocker.patch("tutor.web.services.Evaluator").return_value.evaluate.side_effect = fake_evaluate
+
+    end_session_service(deps, session_id=s.session_id)
+
+    assert captured["ended_at"], (
+        f"ended_at should be set BEFORE the evaluator runs, got {captured['ended_at']!r}"
+    )
+
+
+def test_end_session_writes_error_when_setup_raises(tmp_path, mocker):
+    """Regression: if load_scenario or other pre-evaluator setup raises, the session
+    must still get growth_points_error written so it doesn't stay Analyzing forever.
+    """
+    from tutor.web.services import end_session_service, start_session_service, turn_service
+    deps = _make_deps(tmp_path)
+    deps.llm.complete.return_value = "Hi."
+
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    deps.asr.transcribe.return_value = "I work in IT"
+    deps.llm.complete.return_value = "Great."
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+
+    # Simulate a non-evaluator exception (e.g., load_scenario blowing up)
+    mocker.patch("tutor.web.services.load_scenario", side_effect=RuntimeError("scenario gone"))
+
+    end_session_service(deps, session_id=s.session_id)
+    final = deps.storage.load_session(s.session_id)
+
+    assert final.get("ended_at")
+    assert final.get("growth_points_error")
+    assert "scenario gone" in final["growth_points_error"]
