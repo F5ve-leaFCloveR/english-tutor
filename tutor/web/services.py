@@ -130,7 +130,7 @@ def end_session_service(deps: Dependencies, session_id: str) -> EndSessionResult
         except Exception as e:
             log.warning("Evaluator pipeline raised: %s", e)
             growth_points = []
-            growth_points_error = f"evaluator failed: {e}"
+            growth_points_error = str(e)
             deps.storage.set_growth_points_error(session_id, growth_points_error)
 
         if growth_points_error is None:
