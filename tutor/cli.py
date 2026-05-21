@@ -33,6 +33,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _run_interview(scenario_id: str) -> int:
+    from tutor.scenarios.loader import ScenarioNotFoundError
+
+    try:
+        scenario = load_scenario(scenario_id)
+    except ScenarioNotFoundError:
+        available = ", ".join(list_scenarios())
+        print(f"error: scenario '{scenario_id}' not found. Available: {available}", file=sys.stderr)
+        return 2
+
     settings = get_settings()
     project_root = Path(__file__).resolve().parents[1]
 
@@ -48,7 +57,6 @@ def _run_interview(scenario_id: str) -> int:
     tts = MacSayTTS(voice=settings.tts_voice, rate=settings.tts_rate)
     recorder = AudioRecorder()
     storage = SessionStorage(root=project_root / "sessions")
-    scenario = load_scenario(scenario_id)
 
     print(f"\n=== {scenario.name} ===")
     print(f"Budget today: ${budget.usd_today:.4f} / ${settings.daily_usd_budget}")
