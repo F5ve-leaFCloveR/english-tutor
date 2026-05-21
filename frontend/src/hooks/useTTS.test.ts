@@ -4,8 +4,8 @@ import { useTTS } from "./useTTS";
 
 beforeEach(() => {
   const mockUtterance: any = { text: "", voice: null, onend: null, onerror: null };
-  (global as any).SpeechSynthesisUtterance = vi.fn(() => mockUtterance);
-  (global as any).speechSynthesis = {
+  (globalThis as any).SpeechSynthesisUtterance = vi.fn(() => mockUtterance);
+  (globalThis as any).speechSynthesis = {
     getVoices: () => [{ name: "Voice A" }],
     speak: vi.fn((u: any) => {
       setTimeout(() => u.onend?.(), 0);
@@ -17,7 +17,7 @@ beforeEach(() => {
   // jsdom in vitest may not expose localStorage as a function-bearing object —
   // stub a minimal in-memory implementation.
   const store: Record<string, string> = {};
-  (global as any).localStorage = {
+  (globalThis as any).localStorage = {
     getItem: (k: string) => (k in store ? store[k] : null),
     setItem: (k: string, v: string) => {
       store[k] = v;
@@ -37,7 +37,7 @@ describe("useTTS", () => {
     await act(async () => {
       await result.current.speak("hello");
     });
-    expect((global as any).speechSynthesis.speak).toHaveBeenCalled();
+    expect((globalThis as any).speechSynthesis.speak).toHaveBeenCalled();
   });
 
   it("exposes available voices", () => {

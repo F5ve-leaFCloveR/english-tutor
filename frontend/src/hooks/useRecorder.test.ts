@@ -5,7 +5,7 @@ import { useRecorder } from "./useRecorder";
 beforeEach(() => {
   // Mock MediaRecorder
   const mockStream = { getTracks: () => [] };
-  (global.navigator as any).mediaDevices = {
+  (globalThis as any).navigator.mediaDevices = {
     getUserMedia: vi.fn().mockResolvedValue(mockStream),
   };
 
@@ -27,7 +27,7 @@ beforeEach(() => {
       return true;
     }
   }
-  (global as any).MediaRecorder = MockMediaRecorder;
+  (globalThis as any).MediaRecorder = MockMediaRecorder;
 });
 
 describe("useRecorder", () => {
