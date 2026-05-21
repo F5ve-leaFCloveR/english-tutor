@@ -23,6 +23,8 @@ class Dependencies:
     srs: SRSEngine
     evaluator_model: str
     grader_model: str
+    tts_model: str
+    tts_voice: str
 
 
 def build_dependencies(project_root: Path) -> Dependencies:
@@ -48,4 +50,6 @@ def build_dependencies(project_root: Path) -> Dependencies:
         srs=srs,
         evaluator_model=settings.openrouter_evaluator_model,
         grader_model=settings.openrouter_grader_model,
+        tts_model=settings.tts_model,
+        tts_voice=settings.tts_voice,
     )

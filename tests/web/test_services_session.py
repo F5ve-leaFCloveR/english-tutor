@@ -23,6 +23,7 @@ def _make_deps(tmp_path):
     return Dependencies(
         budget=budget, llm=llm, asr=asr, storage=storage, srs=srs,
         evaluator_model="m1", grader_model="m2",
+        tts_model="m3", tts_voice="v1",
     )
 
 

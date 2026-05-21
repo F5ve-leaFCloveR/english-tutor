@@ -32,6 +32,7 @@ def _client(tmp_path, mocker):
         srs=SRSEngine(path=tmp_path / "cards.json",
                       now=lambda: date(2026, 5, 21)),
         evaluator_model="m1", grader_model="m2",
+        tts_model="m3", tts_voice="v1",
     )
     app = create_app(deps=deps)
     from fastapi.testclient import TestClient

@@ -20,6 +20,7 @@ def _deps(tmp_path):
                                 now=lambda: datetime(2026, 5, 21, 10, 0)),
         srs=SRSEngine(path=tmp_path / "cards.json"),
         evaluator_model="m1", grader_model="m2",
+        tts_model="m3", tts_voice="v1",
     )
 
 

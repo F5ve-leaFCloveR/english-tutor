@@ -16,6 +16,8 @@ def test_dependencies_dataclass_holds_components(tmp_path, monkeypatch):
         srs=SRSEngine(path=tmp_path/"cards.json"),
         evaluator_model="m1",
         grader_model="m2",
+        tts_model="m3",
+        tts_voice="v1",
     )
     assert deps.budget is not None
     assert deps.evaluator_model == "m1"
@@ -34,3 +36,5 @@ def test_build_dependencies_from_settings(tmp_path, monkeypatch, mocker):
     assert deps.srs is not None
     assert deps.evaluator_model == "google/gemini-2.5-pro"
     assert deps.grader_model == "google/gemini-2.5-flash"
+    assert deps.tts_model == "openai/gpt-audio-mini"
+    assert deps.tts_voice == "alloy"
