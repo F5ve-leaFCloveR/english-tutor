@@ -16,9 +16,11 @@ from tutor.scenarios.loader import (
     list_scenarios,
     load_scenario,
 )
+from tutor.stats import StatsCalculator, StatsSummary
 from tutor.web.deps import Dependencies
 from tutor.web.errors import NoSpeechDetectedError, SessionNotFoundError
 from tutor.web.schemas import (
+    BudgetSummary,
     DueCardsResult,
     EndSessionResult,
     GradeResult,
@@ -198,4 +200,18 @@ def grade_card_service(
         target=card.corrected_version,
         explanation=card.explanation,
         next_due=updated.due_date,
+    )
+
+
+def stats_service(deps: Dependencies, days: int | None) -> StatsSummary:
+    calc = StatsCalculator(storage=deps.storage, srs=deps.srs)
+    return calc.compute(days=days)
+
+
+def budget_service(deps: Dependencies) -> BudgetSummary:
+    return BudgetSummary(
+        usd_today=deps.budget.usd_today,
+        tokens_today=deps.budget.tokens_today,
+        daily_usd_cap=deps.budget.daily_usd_cap,
+        daily_token_cap=deps.budget.daily_token_cap,
     )
