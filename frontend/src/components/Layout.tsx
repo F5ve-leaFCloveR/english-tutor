@@ -13,6 +13,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to="/" className="hover:text-slate-900">Scenarios</Link>
             <Link to="/review" className="hover:text-slate-900">Review</Link>
             <Link to="/practice" className="hover:text-slate-900">Practice</Link>
+            <Link to="/chat" className="hover:text-slate-900">Chat</Link>
             <Link to="/stats" className="hover:text-slate-900">Stats</Link>
           </nav>
         </div>
