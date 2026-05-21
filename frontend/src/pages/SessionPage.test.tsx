@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -19,9 +19,14 @@ vi.mock("../api/client", () => ({
 }));
 
 const speakSpy = vi.fn().mockResolvedValue(undefined);
+const ttsState: { lastError: string | null } = { lastError: null };
 vi.mock("../hooks/useTTS", () => ({
-  useTTS: () => ({ speak: speakSpy, isSpeaking: false, voices: [] }),
+  useTTS: () => ({ speak: speakSpy, isSpeaking: false, voices: [], lastError: ttsState.lastError }),
 }));
+
+beforeEach(() => {
+  ttsState.lastError = null;
+});
 
 vi.mock("../hooks/useRecorder", () => ({
   useRecorder: () => ({
@@ -55,6 +60,14 @@ describe("SessionPage", () => {
     render(wrap("/session/s1"));
     await waitFor(() => {
       expect(speakSpy).toHaveBeenCalledWith("Hi, tell me about yourself.");
+    });
+  });
+
+  it("shows TTS error banner when lastError is set", async () => {
+    ttsState.lastError = "Audio reservation $0.50 required";
+    render(wrap("/session/s1"));
+    await waitFor(() => {
+      expect(screen.getByText(/TTS error.*0\.50/i)).toBeInTheDocument();
     });
   });
 });

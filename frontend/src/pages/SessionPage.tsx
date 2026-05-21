@@ -116,6 +116,11 @@ export function SessionPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
       <div className="flex-1 overflow-y-auto p-4 max-w-3xl mx-auto w-full">
+        {tts.lastError && (
+          <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+            TTS error: {tts.lastError}. Using browser voice.
+          </div>
+        )}
         {messages.map((m, i) => (
           <MessageBubble
             key={i}

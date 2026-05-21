@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useTTS } from "./useTTS";
 
@@ -98,5 +98,98 @@ describe("useTTS", () => {
     const { result } = renderHook(() => useTTS());
     expect(result.current.voices).toContain("alloy");
     expect(result.current.voices.length).toBe(10);
+  });
+});
+
+describe("useTTS lastError", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sets lastError when backend returns ApiError", async () => {
+    vi.resetModules();
+    class ApiError extends Error {
+      status: number;
+      body: any;
+      constructor(status: number, body: any) {
+        super(body.message || body.error || "API error");
+        this.status = status;
+        this.body = body;
+      }
+    }
+    vi.doMock("../api/client", () => ({
+      api: {
+        synthesizeTTS: vi.fn().mockRejectedValue(
+          new ApiError(402, { error: "payment_required", message: "Audio reservation $0.50 required" })
+        ),
+      },
+      ApiError,
+    }));
+    const { useTTS: hook } = await import("./useTTS");
+    const { result } = renderHook(() => hook());
+    await act(async () => {
+      await result.current.speak("hi");
+    });
+    expect(result.current.lastError).toMatch(/0\.50|payment|required/i);
+  });
+
+  it("clears lastError on subsequent successful call", async () => {
+    vi.resetModules();
+    class ApiError extends Error {
+      status: number;
+      body: any;
+      constructor(status: number, body: any) {
+        super(body.message || body.error || "API error");
+        this.status = status;
+        this.body = body;
+      }
+    }
+    const synth = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(500, { error: "bad" }))
+      .mockResolvedValueOnce(new Blob([new Uint8Array([1, 2])], { type: "audio/wav" }));
+    vi.doMock("../api/client", () => ({
+      api: { synthesizeTTS: synth },
+      ApiError,
+    }));
+    const { useTTS: hook } = await import("./useTTS");
+    const { result } = renderHook(() => hook());
+    await act(async () => {
+      await result.current.speak("hi");
+    });
+    expect(result.current.lastError).not.toBeNull();
+    await act(async () => {
+      await result.current.speak("hi");
+    });
+    expect(result.current.lastError).toBeNull();
+  });
+
+  it("browser fallback uses voice matching picked name when found", async () => {
+    vi.resetModules();
+    localStorage.setItem("ttsVoice", "coral");
+    const matchedVoice = { name: "Google US English (coral-like)", lang: "en-US" };
+    (globalThis as any).speechSynthesis.getVoices = vi.fn().mockReturnValue([matchedVoice]);
+    const utterances: any[] = [];
+    (globalThis as any).SpeechSynthesisUtterance = vi.fn().mockImplementation(function (this: any, text: string) {
+      this.text = text;
+      this.voice = null;
+      this.onend = null;
+      this.onerror = null;
+      utterances.push(this);
+      return this;
+    });
+    const speakSpy = vi.fn((u: any) => setTimeout(() => u.onend?.(), 0));
+    (globalThis as any).speechSynthesis.speak = speakSpy;
+    vi.doMock("../api/client", () => ({
+      api: { synthesizeTTS: vi.fn().mockRejectedValue(new Error("network")) },
+      ApiError: class extends Error {},
+    }));
+    const { useTTS: hook } = await import("./useTTS");
+    const { result } = renderHook(() => hook());
+    await act(async () => {
+      await result.current.speak("hi");
+    });
+    expect(speakSpy).toHaveBeenCalled();
+    expect(utterances[0].voice).toBe(matchedVoice);
   });
 });
