@@ -89,7 +89,7 @@ def _run_interview(scenario_id: str) -> int:
     budget, llm = _build_common_clients(settings)
 
     asr = WhisperASR(model_size=settings.whisper_model_size)
-    tts = MacSayTTS(voice=settings.tts_voice, rate=settings.tts_rate)
+    tts = MacSayTTS(voice=settings.macos_say_voice, rate=settings.tts_rate)
     recorder = AudioRecorder()
     storage = SessionStorage(root=project_root / "sessions")
 
@@ -118,7 +118,7 @@ def _run_review(limit: int | None, tag: str | None) -> int:
     budget, llm = _build_common_clients(settings)
 
     asr = WhisperASR(model_size=settings.whisper_model_size)
-    tts = MacSayTTS(voice=settings.tts_voice, rate=settings.tts_rate)
+    tts = MacSayTTS(voice=settings.macos_say_voice, rate=settings.tts_rate)
     recorder = AudioRecorder()
     grader = LLMGrader(llm=llm, model=settings.openrouter_grader_model)
     srs = SRSEngine(path=project_root / "cards.json")
