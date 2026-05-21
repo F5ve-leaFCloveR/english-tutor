@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from tutor.web import services
 from tutor.web.deps import Dependencies, build_dependencies
@@ -19,8 +19,10 @@ from tutor.web.schemas import (
     GradeResult,
     StartSessionRequest,
     StartSessionResult,
+    TTSRequest,
     TurnResult,
 )
+from tutor.web.tts import TTSGenerationError, TTSService
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +44,20 @@ def create_app(deps: Dependencies | None = None) -> FastAPI:
 
     app = FastAPI(title="English Tutor API", lifespan=lifespan)
     register_exception_handlers(app)
+
+    tts_service = TTSService(
+        client=deps.llm._client,  # reuse OpenAI/OpenRouter client
+        model=deps.tts_model,
+        default_voice=deps.tts_voice,
+        budget=deps.budget,
+    )
+
+    @app.exception_handler(TTSGenerationError)
+    async def _tts_failed(request, exc):
+        return JSONResponse(
+            status_code=502,
+            content={"error": "tts_generation_failed", "message": str(exc)},
+        )
 
     def get_deps() -> Dependencies:
         return deps
@@ -100,6 +116,11 @@ def create_app(deps: Dependencies | None = None) -> FastAPI:
     @app.get("/api/budget", response_model=BudgetSummary)
     async def budget(d: Dependencies = Depends(get_deps)):
         return services.budget_service(d)
+
+    @app.post("/api/tts")
+    async def synthesize_tts(req: TTSRequest):
+        audio = tts_service.synthesize(req.text, voice=req.voice)
+        return Response(content=audio, media_type="audio/wav")
 
     # Static frontend assets + catch-all for React Router
     static_dir = _default_project_root() / "tutor" / "web" / "static"

@@ -164,3 +164,37 @@ def test_deep_link_route_serves_index_html(tmp_path, mocker):
     client, _ = _client(tmp_path, mocker)
     r = client.get("/session/abc12345")
     assert r.status_code in (200, 404)
+
+
+def test_post_tts_returns_wav(tmp_path, mocker):
+    client, deps = _client(tmp_path, mocker)
+    fake_wav = b"RIFF" + b"\x00" * 100 + b"WAVE"
+    mocker.patch("tutor.web.api.TTSService.synthesize", return_value=fake_wav)
+    r = client.post("/api/tts", json={"text": "hello world"})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "audio/wav"
+    assert r.content == fake_wav
+
+
+def test_post_tts_empty_text_422(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    r = client.post("/api/tts", json={"text": ""})
+    assert r.status_code == 422
+
+
+def test_post_tts_tts_generation_error_502(tmp_path, mocker):
+    from tutor.web.tts import TTSGenerationError
+    client, _ = _client(tmp_path, mocker)
+    mocker.patch("tutor.web.api.TTSService.synthesize",
+                  side_effect=TTSGenerationError("api down"))
+    r = client.post("/api/tts", json={"text": "hi"})
+    assert r.status_code == 502
+    assert r.json()["error"] == "tts_generation_failed"
+
+
+def test_post_tts_uses_voice_from_request(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    spy = mocker.patch("tutor.web.api.TTSService.synthesize", return_value=b"RIFF...")
+    client.post("/api/tts", json={"text": "hi", "voice": "nova"})
+    # Voice was passed either as kw or positional
+    assert spy.call_args.kwargs.get("voice") == "nova" or "nova" in spy.call_args.args
