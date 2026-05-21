@@ -1,10 +1,13 @@
 """Orchestration layer for the web API. Reuses existing modules."""
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 
+from tutor.evaluator import Evaluator
 from tutor.scenarios.loader import (
     Scenario,
     ScenarioNotFoundError,
@@ -15,10 +18,13 @@ from tutor.scenarios.loader import (
 from tutor.web.deps import Dependencies
 from tutor.web.errors import NoSpeechDetectedError, SessionNotFoundError
 from tutor.web.schemas import (
+    EndSessionResult,
     ScenarioSummary,
     StartSessionResult,
     TurnResult,
 )
+
+log = logging.getLogger(__name__)
 
 
 def list_scenarios_service(deps: Dependencies) -> list[ScenarioSummary]:
@@ -85,3 +91,60 @@ def turn_service(deps: Dependencies, session_id: str, audio_bytes: bytes) -> Tur
             tmp.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def end_session_service(deps: Dependencies, session_id: str) -> EndSessionResult:
+    try:
+        session_data = deps.storage.load_session(session_id)
+    except FileNotFoundError as e:
+        raise SessionNotFoundError(session_id) from e
+
+    turns = session_data.get("turns", [])
+    growth_points_dicts: list[dict] = []
+    cards_created_ids: list[str] = []
+    growth_points_error: str | None = None
+
+    if turns:
+        scenario = load_scenario(session_data["scenario_id"])
+        system_prompt = build_system_prompt(scenario, user_native_language="Russian")
+        history: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+        if session_data.get("opening_text"):
+            history.append({"role": "assistant", "content": session_data["opening_text"]})
+        for turn in turns:
+            history.append({"role": "user", "content": turn["user_text"]})
+            history.append({"role": "assistant", "content": turn["llm_text"]})
+
+        try:
+            evaluator = Evaluator(llm=deps.llm, model=deps.evaluator_model)
+            growth_points = evaluator.evaluate(transcript=history)
+        except Exception as e:
+            log.warning("Evaluator raised: %s", e)
+            growth_points = []
+            growth_points_error = f"evaluator failed: {e}"
+            deps.storage.set_growth_points_error(session_id, growth_points_error)
+
+        if growth_points:
+            growth_points_dicts = [
+                gp.model_dump() if hasattr(gp, "model_dump") else asdict(gp)
+                for gp in growth_points
+            ]
+            deps.storage.set_growth_points(session_id, growth_points_dicts)
+            try:
+                cards = deps.srs.create_cards(growth_points, session_id=session_id)
+                cards_created_ids = [c.id for c in cards]
+                deps.storage.set_cards_created(session_id, cards_created_ids)
+            except Exception as e:
+                log.warning("SRS create_cards failed: %s", e)
+                growth_points_error = f"create_cards failed: {e}"
+                deps.storage.set_growth_points_error(session_id, growth_points_error)
+
+    deps.storage.end_session(session_id)
+    final = deps.storage.load_session(session_id)
+
+    return EndSessionResult(
+        session_id=session_id,
+        ended_at=final.get("ended_at"),
+        growth_points=growth_points_dicts,
+        cards_created=cards_created_ids,
+        growth_points_error=growth_points_error,
+    )
