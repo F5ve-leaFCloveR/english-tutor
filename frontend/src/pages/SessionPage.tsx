@@ -83,7 +83,7 @@ export function SessionPage() {
 
   const endMutation = useMutation({
     mutationFn: () => api.endSession(id!),
-    onSuccess: (result) => setSummary(result),
+    // Stage 2b: end now returns 202 + processing; summary modal removed in Task 10.
   });
 
   const handleStart = async () => {

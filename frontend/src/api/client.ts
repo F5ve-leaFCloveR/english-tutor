@@ -1,7 +1,7 @@
 import type {
   BudgetSummary,
   DueCardsResult,
-  EndSessionResult,
+  EndSessionAccepted,
   GradeResult,
   ScenarioSummary,
   SessionData,
@@ -59,8 +59,26 @@ export const api = {
     return request(`/api/sessions/${session_id}/turn`, { method: "POST", body: form });
   },
 
-  endSession(session_id: string): Promise<EndSessionResult> {
+  endSession(session_id: string): Promise<EndSessionAccepted> {
     return request(`/api/sessions/${session_id}/end`, { method: "POST" });
+  },
+
+  async synthesizeTTS(text: string, voice?: string): Promise<Blob> {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+    });
+    if (!res.ok) {
+      let body: ApiErrorBody;
+      try {
+        body = await res.json();
+      } catch {
+        body = { error: "tts_failed" };
+      }
+      throw new ApiError(res.status, body);
+    }
+    return res.blob();
   },
 
   getDueCards(params: { limit?: number; tag?: string } = {}): Promise<DueCardsResult> {

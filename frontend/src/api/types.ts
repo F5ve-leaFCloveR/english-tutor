@@ -99,3 +99,15 @@ export interface ApiErrorBody {
   message?: string;
   [key: string]: unknown;
 }
+
+export interface EndSessionAccepted {
+  session_id: string;
+  status: "processing";
+}
+
+export const OPENAI_TTS_VOICES = [
+  "alloy", "echo", "fable", "onyx", "nova", "shimmer",
+  "ash", "ballad", "coral", "sage", "verse", "marin", "cedar",
+] as const;
+
+export type OpenAITTSVoice = typeof OPENAI_TTS_VOICES[number];

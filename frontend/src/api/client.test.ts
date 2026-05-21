@@ -52,6 +52,29 @@ describe("api client", () => {
     });
     await expect(api.startSession("bogus")).rejects.toThrow();
   });
+
+  it("synthesizeTTS POSTs JSON and returns Blob", async () => {
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/wav" }),
+    });
+    const blob = await api.synthesizeTTS("hello", "nova");
+    expect(blob).toBeInstanceOf(Blob);
+    const call = ((globalThis as any).fetch as any).mock.calls[0];
+    expect(call[0]).toBe("/api/tts");
+    expect(call[1].method).toBe("POST");
+    expect(JSON.parse(call[1].body)).toEqual({ text: "hello", voice: "nova" });
+  });
+
+  it("endSession returns EndSessionAccepted shape", async () => {
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ session_id: "s1", status: "processing" }),
+    });
+    const r = await api.endSession("s1");
+    expect(r.session_id).toBe("s1");
+    expect(r.status).toBe("processing");
+  });
 });
 
 afterAll(() => {
