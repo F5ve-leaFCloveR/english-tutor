@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from tutor.budget import BudgetExceededError
+
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +103,13 @@ class ReviewOrchestrator:
                 else:
                     print(f"> you said: \"{attempt_text}\"")
                     print("[grading...]")
-                    quality = self._grader.grade(target=card.corrected_version, attempt=attempt_text)
+                    try:
+                        quality = self._grader.grade(target=card.corrected_version, attempt=attempt_text)
+                    except BudgetExceededError as e:
+                        print(f"\n[budget exhausted during review: {e}]\n[review ending]")
+                        summary.quality_distribution = dict(quality_counter)
+                        print(f"\n=== Done. {summary.cards_reviewed} cards reviewed. ===\n")
+                        return summary
 
             print(f"\nScore: {quality}/5")
             print(f"Target: \"{card.corrected_version}\"")

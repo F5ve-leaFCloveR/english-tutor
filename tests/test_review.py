@@ -117,3 +117,25 @@ def test_review_respects_limit_and_tag(tmp_path, mocker):
     orch = ReviewOrchestrator(grader=grader, asr=asr, tts=tts, recorder=recorder, srs=srs)
     summary = orch.run(limit=1, tag_filter="vocab")
     assert summary.cards_reviewed == 1
+
+
+def test_review_catches_budget_exception_during_grade(tmp_path, mocker, capsys):
+    """Regression P1: BudgetExceededError raised by grader must end the loop cleanly,
+    not produce a traceback. Cards already reviewed remain persisted."""
+    from tutor.review import ReviewOrchestrator
+    from tutor.budget import BudgetExceededError
+
+    mocker.patch("builtins.input", side_effect=["", ""])
+    srs = _make_srs_with_cards(tmp_path, n_cards=3)
+    asr, tts, recorder, grader = _stub_review_adapters(
+        transcripts=["c0", "c1"],
+        grader_scores=[3, BudgetExceededError("cap hit mid-review")],
+    )
+
+    orch = ReviewOrchestrator(grader=grader, asr=asr, tts=tts, recorder=recorder, srs=srs)
+    summary = orch.run()
+
+    assert summary.cards_reviewed == 1  # only the first card completed
+    captured = capsys.readouterr()
+    assert "budget" in captured.out.lower()
+    assert "Traceback" not in captured.out
