@@ -161,3 +161,17 @@ def test_llm_complete_records_cost_from_usage_model_extra(tmp_path):
 
     assert budget.tokens_today == 15
     assert budget.usd_today == pytest.approx(0.0025)
+
+
+def test_llm_complete_uses_model_override(tmp_path):
+    from tutor.llm import LLMClient
+
+    budget = _make_budget(tmp_path)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _make_response("ok", 10, 5, 0.0001)
+
+    llm = LLMClient(client=fake_client, model="default-model", budget=budget)
+    llm.complete(messages=[{"role": "user", "content": "hi"}], model_override="other-model")
+
+    call_kwargs = fake_client.chat.completions.create.call_args
+    assert call_kwargs.kwargs["model"] == "other-model"
