@@ -48,3 +48,31 @@ def test_build_system_prompt_raises_on_unknown_placeholder():
     )
     with pytest.raises(UndefinedError):
         build_system_prompt(sc, user_native_language="Russian")
+
+
+def test_load_scenario_daily_standup():
+    from tutor.scenarios.loader import load_scenario, build_system_prompt
+    sc = load_scenario("daily_standup")
+    assert sc.id == "daily_standup"
+    assert "standup" in sc.name.lower()
+    assert sc.opening_line
+    prompt = build_system_prompt(sc, user_native_language="Russian")
+    assert "Russian" in prompt
+
+
+def test_load_scenario_apartment_rental():
+    from tutor.scenarios.loader import load_scenario, build_system_prompt
+    sc = load_scenario("apartment_rental_abroad")
+    assert sc.id == "apartment_rental_abroad"
+    assert "rental" in sc.name.lower() or "apartment" in sc.name.lower()
+    assert sc.opening_line
+    prompt = build_system_prompt(sc, user_native_language="Russian")
+    assert "Russian" in prompt
+
+
+def test_list_scenarios_includes_new():
+    from tutor.scenarios.loader import list_scenarios
+    ids = list_scenarios()
+    assert "tech_interview_behavioral" in ids
+    assert "daily_standup" in ids
+    assert "apartment_rental_abroad" in ids
