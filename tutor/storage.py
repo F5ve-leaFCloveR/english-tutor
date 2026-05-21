@@ -70,6 +70,24 @@ class SessionStorage:
         data["ended_at"] = self.now().isoformat()
         self._write(path, data)
 
+    def set_growth_points(self, session_id: str, growth_points: list[dict]) -> None:
+        path = self._find_session_path(session_id)
+        data = json.loads(path.read_text())
+        data["growth_points"] = growth_points
+        self._write(path, data)
+
+    def set_growth_points_error(self, session_id: str, error_message: str) -> None:
+        path = self._find_session_path(session_id)
+        data = json.loads(path.read_text())
+        data["growth_points_error"] = error_message
+        self._write(path, data)
+
+    def set_cards_created(self, session_id: str, card_ids: list[str]) -> None:
+        path = self._find_session_path(session_id)
+        data = json.loads(path.read_text())
+        data["cards_created"] = card_ids
+        self._write(path, data)
+
     def load_session(self, session_id: str) -> dict:
         path = self._find_session_path(session_id)
         return json.loads(path.read_text())

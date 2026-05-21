@@ -90,3 +90,40 @@ def test_storage_write_cleans_up_tmp_on_failure(tmp_path, mocker):
     # No orphan .tmp file remains
     tmp_files = list(session_path.parent.glob("*.tmp"))
     assert tmp_files == [], f"orphan tmp files: {tmp_files}"
+
+
+def test_storage_persists_growth_points(tmp_path):
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    session_id = storage.create_session("tech_interview_behavioral")
+    storage.set_growth_points(session_id, [
+        {"tag": "vocab", "user_utterance": "I made a project", "corrected_version": "I led a project",
+         "explanation": "Led signals ownership.", "context": None},
+    ])
+    data = storage.load_session(session_id)
+    assert len(data["growth_points"]) == 1
+    assert data["growth_points"][0]["tag"] == "vocab"
+
+
+def test_storage_persists_growth_points_error(tmp_path):
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    session_id = storage.create_session("tech_interview_behavioral")
+    storage.set_growth_points_error(session_id, "parse failed")
+    data = storage.load_session(session_id)
+    assert data["growth_points_error"] == "parse failed"
+
+
+def test_storage_persists_cards_created(tmp_path):
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    session_id = storage.create_session("tech_interview_behavioral")
+    storage.set_cards_created(session_id, ["card_abc12345", "card_def67890"])
+    data = storage.load_session(session_id)
+    assert data["cards_created"] == ["card_abc12345", "card_def67890"]
