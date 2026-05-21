@@ -121,3 +121,22 @@ def test_srs_engine_record_review_unknown_card_raises(tmp_path):
     engine = SRSEngine(path=tmp_path / "cards.json", now=lambda: date(2026, 5, 22))
     with pytest.raises(CardNotFoundError):
         engine.record_review("does_not_exist", quality=3)
+
+
+def test_srs_engine_corrupt_cards_json_backs_up_and_raises(tmp_path):
+    """Regression P2: corrupt cards.json must NOT silently destroy data.
+    Engine raises RuntimeError; the bad file is renamed to .broken-<ts>."""
+    from tutor.srs_engine import SRSEngine
+    import pytest as _pytest
+
+    cards_path = tmp_path / "cards.json"
+    cards_path.write_text("{ this is not valid json")
+
+    with _pytest.raises(RuntimeError, match="corrupt"):
+        SRSEngine(path=cards_path, now=lambda: date(2026, 5, 21))
+
+    # Original file was renamed to a .broken-* sibling
+    backups = list(tmp_path.glob("cards.broken-*"))
+    assert len(backups) == 1, f"expected exactly one backup, got {backups}"
+    # Original path no longer exists (was renamed away)
+    assert not cards_path.exists()

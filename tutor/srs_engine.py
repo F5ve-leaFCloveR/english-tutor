@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
@@ -45,8 +46,16 @@ class SRSEngine:
             return {}
         try:
             raw = json.loads(self._path.read_text())
-        except (json.JSONDecodeError, OSError):
-            return {}
+        except (json.JSONDecodeError, OSError) as e:
+            backup = self._path.with_suffix(f".broken-{int(time.time())}")
+            try:
+                self._path.rename(backup)
+            except OSError:
+                pass
+            raise RuntimeError(
+                f"cards.json is corrupt. Backed up to {backup}. "
+                f"Inspect or delete to start fresh. Error: {e}"
+            )
         cards: dict[str, Card] = {}
         for c in raw.get("cards", []):
             card = Card(**c)
