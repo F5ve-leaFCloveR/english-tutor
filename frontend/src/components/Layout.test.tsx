@@ -43,6 +43,7 @@ describe("Layout", () => {
     render(wrap(<Layout><div>content</div></Layout>));
     expect(screen.getByText(/scenarios/i)).toBeInTheDocument();
     expect(screen.getByText(/review/i)).toBeInTheDocument();
+    expect(screen.getByText(/practice/i)).toBeInTheDocument();
     expect(screen.getByText(/stats/i)).toBeInTheDocument();
   });
 });

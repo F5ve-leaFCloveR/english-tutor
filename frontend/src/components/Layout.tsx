@@ -12,6 +12,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <nav className="flex gap-3 text-sm text-slate-600">
             <Link to="/" className="hover:text-slate-900">Scenarios</Link>
             <Link to="/review" className="hover:text-slate-900">Review</Link>
+            <Link to="/practice" className="hover:text-slate-900">Practice</Link>
             <Link to="/stats" className="hover:text-slate-900">Stats</Link>
           </nav>
         </div>
