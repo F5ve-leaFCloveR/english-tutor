@@ -41,3 +41,29 @@ def test_storage_marks_session_ended(tmp_path):
 
     data = storage.load_session(session_id)
     assert data["ended_at"] is not None
+
+
+def test_storage_write_is_atomic(tmp_path, mocker):
+    """Regression: crash during _write must leave either old or new content, never partial."""
+    from tutor.storage import SessionStorage
+    from datetime import datetime
+
+    storage = SessionStorage(root=tmp_path, now=lambda: datetime(2026, 5, 21, 10, 0))
+    session_id = storage.create_session(scenario_id="tech_interview_behavioral")
+
+    session_path = next(tmp_path.rglob(f"{session_id}.json"))
+
+    import os
+    original_replace = os.replace
+    rename_was_called = []
+
+    def spy_replace(src, dst):
+        rename_was_called.append((str(src), str(dst)))
+        return original_replace(src, dst)
+
+    mocker.patch("os.replace", side_effect=spy_replace)
+    storage.append_turn(session_id, user_text="hi", llm_text="hello")
+    assert len(rename_was_called) >= 1
+    src, dst = rename_was_called[-1]
+    assert dst == str(session_path)
+    assert src.endswith(".json.tmp") or src.endswith(".tmp")
