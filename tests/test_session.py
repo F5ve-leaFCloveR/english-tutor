@@ -296,3 +296,106 @@ def test_session_cleans_up_temp_wavs(tmp_path, mocker):
     after = set(glob.glob(pattern))
     new_files = after - before
     assert new_files == set(), f"orphan temp WAVs left: {new_files}"
+
+
+def test_session_writes_growth_points_error_on_evaluator_raise(tmp_path, mocker):
+    """Regression P4: when evaluator raises, session.json records growth_points_error."""
+    from tutor.session import SessionOrchestrator
+    from tutor.storage import SessionStorage
+    from tutor.scenarios.loader import load_scenario
+
+    mocker.patch("builtins.input", side_effect=["", "end"])
+    llm, asr, tts, recorder = _stub_adapters(
+        turn_user_texts=["hi"],
+        turn_llm_replies=["Opening.", "Reply."],
+    )
+
+    fake_evaluator = MagicMock()
+    fake_evaluator.evaluate.side_effect = RuntimeError("api down")
+    fake_srs = MagicMock()
+
+    storage = SessionStorage(root=tmp_path)
+    orch = SessionOrchestrator(
+        llm=llm, asr=asr, tts=tts, recorder=recorder, storage=storage,
+        scenario=load_scenario("tech_interview_behavioral"),
+        per_session_turn_limit=25,
+        evaluator=fake_evaluator,
+        srs_engine=fake_srs,
+    )
+    session_id = orch.run()
+    data = storage.load_session(session_id)
+    assert "evaluator failed" in data.get("growth_points_error", "")
+    assert "api down" in data.get("growth_points_error", "")
+    fake_srs.create_cards.assert_not_called()
+
+
+def test_session_no_growth_points_error_when_evaluator_returns_empty(tmp_path, mocker):
+    """Regression P4: empty list is NOT an error — no growth_points_error written."""
+    from tutor.session import SessionOrchestrator
+    from tutor.storage import SessionStorage
+    from tutor.scenarios.loader import load_scenario
+
+    mocker.patch("builtins.input", side_effect=["", "end"])
+    llm, asr, tts, recorder = _stub_adapters(
+        turn_user_texts=["hi"],
+        turn_llm_replies=["Opening.", "Reply."],
+    )
+
+    fake_evaluator = MagicMock()
+    fake_evaluator.evaluate.return_value = []
+    fake_srs = MagicMock()
+
+    storage = SessionStorage(root=tmp_path)
+    orch = SessionOrchestrator(
+        llm=llm, asr=asr, tts=tts, recorder=recorder, storage=storage,
+        scenario=load_scenario("tech_interview_behavioral"),
+        per_session_turn_limit=25,
+        evaluator=fake_evaluator,
+        srs_engine=fake_srs,
+    )
+    session_id = orch.run()
+    data = storage.load_session(session_id)
+    assert "growth_points_error" not in data
+
+
+def test_session_create_cards_failure_visible(tmp_path, mocker, capsys):
+    """Regression P3: srs.create_cards failure prints user-visible error AND
+    writes growth_points_error to session JSON. Growth points remain persisted."""
+    from tutor.session import SessionOrchestrator
+    from tutor.storage import SessionStorage
+    from tutor.scenarios.loader import load_scenario
+    from tutor.evaluator import GrowthPoint
+
+    mocker.patch("builtins.input", side_effect=["", "end"])
+    llm, asr, tts, recorder = _stub_adapters(
+        turn_user_texts=["hi"],
+        turn_llm_replies=["Opening.", "Reply."],
+    )
+
+    fake_evaluator = MagicMock()
+    fake_evaluator.evaluate.return_value = [
+        GrowthPoint(tag="vocab", user_utterance="hi", corrected_version="hello",
+                    explanation="more formal", context=None),
+    ]
+    fake_srs = MagicMock()
+    fake_srs.create_cards.side_effect = OSError("disk full")
+
+    storage = SessionStorage(root=tmp_path)
+    orch = SessionOrchestrator(
+        llm=llm, asr=asr, tts=tts, recorder=recorder, storage=storage,
+        scenario=load_scenario("tech_interview_behavioral"),
+        per_session_turn_limit=25,
+        evaluator=fake_evaluator,
+        srs_engine=fake_srs,
+    )
+    session_id = orch.run()
+
+    captured = capsys.readouterr()
+    assert "failed to save cards" in captured.out.lower()
+    assert "disk full" in captured.out
+
+    data = storage.load_session(session_id)
+    # Growth points were saved BEFORE the create_cards attempt
+    assert len(data["growth_points"]) == 1
+    # The error is recorded
+    assert "create_cards failed" in data.get("growth_points_error", "")

@@ -113,11 +113,14 @@ class SessionOrchestrator:
 
             # After loop: run evaluator if provided and there were turns
             if self._evaluator is not None and self._srs_engine is not None and turn_count > 0:
+                evaluator_raised = False
                 try:
                     growth_points = self._evaluator.evaluate(transcript=history)
                 except Exception as e:
                     log.warning("Evaluator raised unexpectedly: %s", e)
+                    self._storage.set_growth_points_error(session_id, f"evaluator failed: {e}")
                     growth_points = []
+                    evaluator_raised = True
 
                 if growth_points:
                     gp_dicts = [
@@ -131,7 +134,11 @@ class SessionOrchestrator:
                         print(f"\n[saved {len(cards)} cards for review tomorrow]")
                     except Exception as e:
                         log.warning("SRS create_cards failed: %s", e)
-                else:
+                        self._storage.set_growth_points_error(
+                            session_id, f"create_cards failed: {e}"
+                        )
+                        print(f"\n[failed to save cards: {e}]")
+                elif not evaluator_raised:
                     log.info("Evaluator returned no growth points; no cards created.")
         finally:
             # Clean up temp WAVs
