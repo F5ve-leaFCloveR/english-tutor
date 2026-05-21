@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from tutor.evaluator import Evaluator
+from tutor.grader import LLMGrader
 from tutor.scenarios.loader import (
     Scenario,
     ScenarioNotFoundError,
@@ -18,7 +19,9 @@ from tutor.scenarios.loader import (
 from tutor.web.deps import Dependencies
 from tutor.web.errors import NoSpeechDetectedError, SessionNotFoundError
 from tutor.web.schemas import (
+    DueCardsResult,
     EndSessionResult,
+    GradeResult,
     ScenarioSummary,
     StartSessionResult,
     TurnResult,
@@ -147,4 +150,52 @@ def end_session_service(deps: Dependencies, session_id: str) -> EndSessionResult
         growth_points=growth_points_dicts,
         cards_created=cards_created_ids,
         growth_points_error=growth_points_error,
+    )
+
+
+def review_due_service(
+    deps: Dependencies, limit: int | None, tag: str | None
+) -> DueCardsResult:
+    cards = deps.srs.due_today(limit=limit, tag=tag)
+    return DueCardsResult(
+        cards=[asdict(c) for c in cards],
+        total_due=len(cards),
+    )
+
+
+def grade_card_service(
+    deps: Dependencies, card_id: str, audio_bytes: bytes | None, skip: bool
+) -> GradeResult:
+    card = deps.srs.load_card(card_id)  # raises CardNotFoundError
+
+    if skip:
+        quality = 0
+        user_attempt_text = "(skipped)"
+    else:
+        if audio_bytes is None:
+            raise NoSpeechDetectedError("no audio submitted")
+        tmp = Path(tempfile.gettempdir()) / f"web_grade_{card_id}_{os.getpid()}.bin"
+        tmp.write_bytes(audio_bytes)
+        try:
+            user_attempt_text = deps.asr.transcribe(tmp).strip()
+        finally:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if not user_attempt_text:
+            quality = 0
+        else:
+            grader = LLMGrader(llm=deps.llm, model=deps.grader_model)
+            quality = grader.grade(target=card.corrected_version, attempt=user_attempt_text)
+
+    deps.srs.record_review(card_id, quality=quality)
+    updated = deps.srs.load_card(card_id)
+    return GradeResult(
+        card_id=card_id,
+        user_attempt_text=user_attempt_text,
+        quality=quality,
+        target=card.corrected_version,
+        explanation=card.explanation,
+        next_due=updated.due_date,
     )
