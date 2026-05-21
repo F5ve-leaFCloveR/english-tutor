@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BudgetIndicator } from "./BudgetIndicator";
+import { VoicePicker } from "./VoicePicker";
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
@@ -14,7 +15,10 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to="/stats" className="hover:text-slate-900">Stats</Link>
           </nav>
         </div>
-        <BudgetIndicator />
+        <div className="flex items-center gap-3">
+          <VoicePicker />
+          <BudgetIndicator />
+        </div>
       </header>
       <main className="flex-1 flex flex-col">{children}</main>
     </div>
