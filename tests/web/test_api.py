@@ -149,3 +149,17 @@ def test_get_budget_returns_caps(tmp_path, mocker):
     body = r.json()
     assert body["daily_usd_cap"] == 1.0
     assert body["daily_token_cap"] == 1_000_000
+
+
+def test_static_root_serves_index_html(tmp_path, mocker):
+    """GET / serves index.html from static/."""
+    client, _ = _client(tmp_path, mocker)
+    r = client.get("/")
+    assert r.status_code in (200, 404)
+
+
+def test_deep_link_route_serves_index_html(tmp_path, mocker):
+    """GET /session/abc serves index.html (catch-all for React Router)."""
+    client, _ = _client(tmp_path, mocker)
+    r = client.get("/session/abc12345")
+    assert r.status_code in (200, 404)

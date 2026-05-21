@@ -27,3 +27,10 @@ cards.json
 .idea/
 *.swp
 .DS_Store
+.superpowers/
+
+# Frontend build artifacts (placeholder index.html stays tracked)
+tutor/web/static/assets/
+tutor/web/static/*.js
+tutor/web/static/*.css
+tutor/web/static/*.map

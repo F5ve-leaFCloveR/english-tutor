@@ -101,4 +101,21 @@ def create_app(deps: Dependencies | None = None) -> FastAPI:
     async def budget(d: Dependencies = Depends(get_deps)):
         return services.budget_service(d)
 
+    # Static frontend assets + catch-all for React Router
+    static_dir = _default_project_root() / "tutor" / "web" / "static"
+    index_file = static_dir / "index.html"
+
+    if (static_dir / "assets").exists():
+        from fastapi.staticfiles import StaticFiles
+        app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
+
+    @app.get("/")
+    @app.get("/{path:path}")
+    async def serve_spa(path: str = ""):
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        if index_file.exists():
+            return FileResponse(str(index_file))
+        raise HTTPException(status_code=404, detail="Frontend not built")
+
     return app
