@@ -140,3 +140,29 @@ def test_srs_engine_corrupt_cards_json_backs_up_and_raises(tmp_path):
     assert len(backups) == 1, f"expected exactly one backup, got {backups}"
     # Original path no longer exists (was renamed away)
     assert not cards_path.exists()
+
+
+def test_srs_engine_all_cards_returns_list_snapshot(tmp_path):
+    from tutor.srs_engine import SRSEngine
+    from tutor.evaluator import GrowthPoint
+
+    engine = SRSEngine(path=tmp_path / "cards.json", now=lambda: date(2026, 5, 21))
+    gps = [
+        GrowthPoint(tag="vocab", user_utterance="u1", corrected_version="c1",
+                    explanation="e", context=None),
+        GrowthPoint(tag="grammar", user_utterance="u2", corrected_version="c2",
+                    explanation="e", context=None),
+    ]
+    engine.create_cards(gps, session_id="s1")
+
+    all_cards = engine.all_cards()
+    assert len(all_cards) == 2
+    tags = sorted(c.tag for c in all_cards)
+    assert tags == ["grammar", "vocab"]
+
+
+def test_srs_engine_all_cards_empty_when_no_cards(tmp_path):
+    from tutor.srs_engine import SRSEngine
+
+    engine = SRSEngine(path=tmp_path / "cards.json", now=lambda: date(2026, 5, 21))
+    assert engine.all_cards() == []

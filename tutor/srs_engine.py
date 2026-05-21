@@ -131,3 +131,8 @@ class SRSEngine:
         if card is None:
             raise CardNotFoundError(f"No card with id {card_id}")
         return card
+
+    def all_cards(self) -> list[Card]:
+        """Return a snapshot of all cards. Read-only; mutations don't propagate
+        back unless callers use record_review/create_cards."""
+        return list(self._cards.values())
