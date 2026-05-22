@@ -58,14 +58,23 @@ class SessionStorage:
         })
         return session_id
 
-    def append_turn(self, session_id: str, user_text: str, llm_text: str) -> None:
+    def append_turn(
+        self,
+        session_id: str,
+        user_text: str,
+        llm_text: str,
+        corrections: list[dict] | None = None,
+    ) -> None:
         path = self._find_session_path(session_id)
         data = json.loads(path.read_text())
-        data["turns"].append({
+        turn: dict = {
             "ts": self.now().isoformat(),
             "user_text": user_text,
             "llm_text": llm_text,
-        })
+        }
+        if corrections is not None:
+            turn["corrections"] = corrections
+        data["turns"].append(turn)
         self._write(path, data)
 
     def end_session(self, session_id: str) -> None:

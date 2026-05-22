@@ -194,3 +194,41 @@ def test_storage_set_opening_text_persists(tmp_path):
     storage.set_opening_text(session_id, "Hi, tell me about a project.")
     data = storage.load_session(session_id)
     assert data["opening_text"] == "Hi, tell me about a project."
+
+
+def test_append_turn_persists_corrections(tmp_path):
+    from tutor.storage import SessionStorage
+    storage = SessionStorage(root=tmp_path)
+    sid = storage.create_session(scenario_id="tech_interview_behavioral")
+    storage.append_turn(
+        sid,
+        user_text="I goed there",
+        llm_text="Interesting!",
+        corrections=[{
+            "tag": "grammar",
+            "user_utterance": "I goed",
+            "corrected_version": "I went",
+            "explanation": "Past tense of 'go' is 'went'.",
+        }],
+    )
+    data = storage.load_session(sid)
+    assert len(data["turns"]) == 1
+    turn = data["turns"][0]
+    assert turn["user_text"] == "I goed there"
+    assert turn["llm_text"] == "Interesting!"
+    assert turn["corrections"] == [{
+        "tag": "grammar",
+        "user_utterance": "I goed",
+        "corrected_version": "I went",
+        "explanation": "Past tense of 'go' is 'went'.",
+    }]
+
+
+def test_append_turn_without_corrections_omits_field(tmp_path):
+    """Backward compat: callers that don't pass corrections produce the legacy turn shape."""
+    from tutor.storage import SessionStorage
+    storage = SessionStorage(root=tmp_path)
+    sid = storage.create_session(scenario_id="tech_interview_behavioral")
+    storage.append_turn(sid, user_text="hi", llm_text="hello")
+    data = storage.load_session(sid)
+    assert "corrections" not in data["turns"][0]
