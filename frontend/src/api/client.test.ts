@@ -105,6 +105,51 @@ describe("api client", () => {
     expect(body.history).toEqual([{ role: "user", content: "hi" }]);
     expect(body.message).toBe("I goed");
   });
+
+  it("createCustomScenario posts payload and returns summary", async () => {
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "my-talk", name: "My Talk", difficulty: "easy", is_custom: true }),
+    });
+    const res = await api.createCustomScenario({
+      name: "My Talk", difficulty: "easy", system_prompt: "P", opening_line: "Hi",
+    });
+    expect(res.id).toBe("my-talk");
+    const call = ((globalThis as any).fetch as any).mock.calls[0];
+    expect(call[0]).toBe("/api/scenarios/custom");
+    expect(call[1].method).toBe("POST");
+    const body = JSON.parse(call[1].body);
+    expect(body.name).toBe("My Talk");
+    expect(body.system_prompt).toBe("P");
+  });
+
+  it("deleteCustomScenario sends DELETE and resolves on 204", async () => {
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: async () => { throw new Error("204 has no body"); },
+    });
+    await api.deleteCustomScenario("my-talk");
+    const call = ((globalThis as any).fetch as any).mock.calls[0];
+    expect(call[0]).toBe("/api/scenarios/custom/my-talk");
+    expect(call[1].method).toBe("DELETE");
+  });
+
+  it("gradeCard supports practice_only flag", async () => {
+    (globalThis as any).fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        card_id: "c1", quality: 4, user_attempt_text: "x", target: "y",
+        explanation: "z", next_due: "2026-05-23",
+      }),
+    });
+    await api.gradeCard("c1", new Blob(["a"]), false, true);
+    const call = ((globalThis as any).fetch as any).mock.calls[0];
+    expect(String(call[0])).toContain("/api/review/c1/grade");
+    expect(String(call[0])).toContain("practice_only=true");
+  });
 });
 
 afterAll(() => {

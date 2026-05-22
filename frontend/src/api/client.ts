@@ -2,6 +2,7 @@ import type {
   BudgetSummary,
   ChatMessageDict,
   ChatResponseDict,
+  CustomScenarioCreate,
   DueCardsResult,
   EndSessionAccepted,
   GradeResult,
@@ -34,6 +35,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, body);
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -41,6 +43,20 @@ export const api = {
   async getScenarios(): Promise<ScenarioSummary[]> {
     const data = await request<{ scenarios: ScenarioSummary[] }>("/api/scenarios");
     return data.scenarios;
+  },
+
+  createCustomScenario(req: CustomScenarioCreate): Promise<ScenarioSummary> {
+    return request<ScenarioSummary>("/api/scenarios/custom", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+  },
+
+  deleteCustomScenario(scenario_id: string): Promise<void> {
+    return request<void>(`/api/scenarios/custom/${encodeURIComponent(scenario_id)}`, {
+      method: "DELETE",
+    });
   },
 
   startSession(scenario_id: string): Promise<StartSessionResult> {
@@ -91,18 +107,27 @@ export const api = {
     return request(`/api/review/due${suffix}`);
   },
 
-  gradeCard(card_id: string, audio: Blob | null, skip: boolean): Promise<GradeResult> {
+  gradeCard(
+    card_id: string,
+    audio: Blob | null,
+    skip: boolean,
+    practice_only: boolean = false,
+  ): Promise<GradeResult> {
+    const qs = new URLSearchParams();
+    if (skip) qs.set("skip", "true");
+    if (practice_only) qs.set("practice_only", "true");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
     if (skip) {
       const form = new FormData();
       form.append("skip", "true");
-      return request(`/api/review/${card_id}/grade?skip=true`, {
+      return request(`/api/review/${card_id}/grade${suffix}`, {
         method: "POST",
         body: form,
       });
     }
     const form = new FormData();
     if (audio) form.append("audio", audio, "grade.webm");
-    return request(`/api/review/${card_id}/grade`, { method: "POST", body: form });
+    return request(`/api/review/${card_id}/grade${suffix}`, { method: "POST", body: form });
   },
 
   getStats(days?: number): Promise<StatsSummary> {

@@ -2,6 +2,7 @@ export interface ScenarioSummary {
   id: string;
   name: string;
   difficulty: string;
+  is_custom?: boolean;
 }
 
 export interface StartSessionResult {
@@ -127,4 +128,11 @@ export interface ChatCorrectionDict {
 export interface ChatResponseDict {
   reply: string;
   corrections: ChatCorrectionDict[];
+}
+
+export interface CustomScenarioCreate {
+  name: string;
+  difficulty: string;
+  system_prompt: string;
+  opening_line?: string;
 }
