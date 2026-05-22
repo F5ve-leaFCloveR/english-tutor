@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 import io
@@ -33,6 +34,7 @@ def _client(tmp_path, mocker):
                       now=lambda: date(2026, 5, 21)),
         evaluator_model="m1", grader_model="m2",
         tts_model="m3", tts_voice="v1",
+        chat_model="m-chat",
     )
     app = create_app(deps=deps)
     from fastapi.testclient import TestClient
@@ -86,7 +88,9 @@ def test_post_turn_uploads_audio_and_returns_reply(tmp_path, mocker):
     client, deps = _client(tmp_path, mocker)
     r = client.post("/api/sessions", json={"scenario_id": "tech_interview_behavioral"})
     sid = r.json()["session_id"]
-    deps.llm.complete.return_value = "What was the scope?"
+    deps.llm.complete.return_value = json.dumps(
+        {"reply": "What was the scope?", "corrections": []}
+    )
 
     files = {"audio": ("turn.webm", io.BytesIO(b"fake_audio_bytes"), "audio/webm")}
     r2 = client.post(f"/api/sessions/{sid}/turn", files=files)

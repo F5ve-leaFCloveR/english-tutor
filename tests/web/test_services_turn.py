@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from unittest.mock import MagicMock
 import pytest
 
@@ -21,6 +22,7 @@ def _deps(tmp_path):
         srs=SRSEngine(path=tmp_path / "cards.json"),
         evaluator_model="m1", grader_model="m2",
         tts_model="m3", tts_voice="v1",
+        chat_model="m-chat",
     )
 
 
@@ -32,7 +34,9 @@ def test_turn_service_happy_path(tmp_path):
 
     started = start_session_service(deps, scenario_id="tech_interview_behavioral")
     deps.llm.complete.reset_mock()
-    deps.llm.complete.return_value = "What was the project?"
+    deps.llm.complete.return_value = json.dumps(
+        {"reply": "What was the project?", "corrections": []}
+    )
 
     result = turn_service(deps, session_id=started.session_id, audio_bytes=b"fake_audio")
 
@@ -73,11 +77,11 @@ def test_turn_service_builds_full_history_for_llm(tmp_path):
 
     started = start_session_service(deps, scenario_id="tech_interview_behavioral")
     deps.llm.complete.reset_mock()
-    deps.llm.complete.return_value = "Reply 1"
+    deps.llm.complete.return_value = json.dumps({"reply": "Reply 1", "corrections": []})
     turn_service(deps, session_id=started.session_id, audio_bytes=b"x")
 
     deps.llm.complete.reset_mock()
-    deps.llm.complete.return_value = "Reply 2"
+    deps.llm.complete.return_value = json.dumps({"reply": "Reply 2", "corrections": []})
     deps.asr.transcribe.return_value = "Second user reply"
     turn_service(deps, session_id=started.session_id, audio_bytes=b"y")
 

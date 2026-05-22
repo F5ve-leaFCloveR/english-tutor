@@ -7,6 +7,7 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
+from tutor.conversation import ChatTurn, build_session_chat_prompt
 from tutor.evaluator import Evaluator
 from tutor.grader import LLMGrader
 from tutor.scenarios.loader import (
@@ -74,23 +75,33 @@ def turn_service(deps: Dependencies, session_id: str, audio_bytes: bytes) -> Tur
         if not user_text:
             raise NoSpeechDetectedError(f"empty transcript for session {session_id}")
 
-        # 3. Build messages
+        # 3. Build chat history (excludes the new user message)
         scenario = load_scenario(session_data["scenario_id"])
-        system_prompt = build_system_prompt(scenario, user_native_language="Russian")
-        messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+        system_prompt = build_session_chat_prompt(scenario, user_native_language="Russian")
+        history: list[dict[str, str]] = []
         if session_data.get("opening_text"):
-            messages.append({"role": "assistant", "content": session_data["opening_text"]})
+            history.append({"role": "assistant", "content": session_data["opening_text"]})
         for turn in session_data.get("turns", []):
-            messages.append({"role": "user", "content": turn["user_text"]})
-            messages.append({"role": "assistant", "content": turn["llm_text"]})
-        messages.append({"role": "user", "content": user_text})
+            history.append({"role": "user", "content": turn["user_text"]})
+            history.append({"role": "assistant", "content": turn["llm_text"]})
 
-        # 4. LLM call
-        assistant_text = deps.llm.complete(messages=messages)
+        # 4. ChatTurn call: reply + corrections in one shot
+        chat = ChatTurn(llm=deps.llm, model=deps.chat_model, system_prompt=system_prompt)
+        response = chat.respond(history=history, message=user_text)
+        correction_dicts = [c.model_dump() for c in response.corrections]
 
-        # 5. Persist
-        deps.storage.append_turn(session_id, user_text=user_text, llm_text=assistant_text)
-        return TurnResult(user_text=user_text, assistant_text=assistant_text)
+        # 5. Persist turn (with corrections)
+        deps.storage.append_turn(
+            session_id,
+            user_text=user_text,
+            llm_text=response.reply,
+            corrections=correction_dicts,
+        )
+        return TurnResult(
+            user_text=user_text,
+            assistant_text=response.reply,
+            corrections=correction_dicts,
+        )
     finally:
         try:
             tmp.unlink(missing_ok=True)

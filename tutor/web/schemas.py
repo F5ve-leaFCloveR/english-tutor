@@ -24,6 +24,7 @@ class StartSessionResult(BaseModel):
 class TurnResult(BaseModel):
     user_text: str
     assistant_text: str
+    corrections: list[dict] = Field(default_factory=list)
 
 
 class EndSessionResult(BaseModel):

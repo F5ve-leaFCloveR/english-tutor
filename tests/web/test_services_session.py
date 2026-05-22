@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 import pytest
@@ -24,6 +25,7 @@ def _make_deps(tmp_path):
         budget=budget, llm=llm, asr=asr, storage=storage, srs=srs,
         evaluator_model="m1", grader_model="m2",
         tts_model="m3", tts_voice="v1",
+        chat_model="m-chat",
     )
 
 
@@ -132,7 +134,7 @@ def test_end_session_persists_empty_growth_points_when_evaluator_returns_empty(t
     s = start_session_service(deps, scenario_id="tech_interview_behavioral")
     # Add one turn so the evaluator path runs
     deps.asr.transcribe.return_value = "I work in IT"
-    deps.llm.complete.return_value = "Great."
+    deps.llm.complete.return_value = json.dumps({"reply": "Great.", "corrections": []})
     turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
 
     # Patch the Evaluator to return empty growth_points
@@ -174,7 +176,7 @@ def test_end_session_sets_ended_at_before_evaluator_runs(tmp_path, mocker):
     deps.llm.complete.return_value = "Hi."
     s = start_session_service(deps, scenario_id="tech_interview_behavioral")
     deps.asr.transcribe.return_value = "I work in IT"
-    deps.llm.complete.return_value = "Great."
+    deps.llm.complete.return_value = json.dumps({"reply": "Great.", "corrections": []})
     turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
 
     # Capture storage state at the moment the evaluator runs
@@ -202,7 +204,7 @@ def test_end_session_writes_error_when_setup_raises(tmp_path, mocker):
 
     s = start_session_service(deps, scenario_id="tech_interview_behavioral")
     deps.asr.transcribe.return_value = "I work in IT"
-    deps.llm.complete.return_value = "Great."
+    deps.llm.complete.return_value = json.dumps({"reply": "Great.", "corrections": []})
     turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
 
     # Simulate a non-evaluator exception (e.g., load_scenario blowing up)
@@ -214,3 +216,71 @@ def test_end_session_writes_error_when_setup_raises(tmp_path, mocker):
     assert final.get("ended_at")
     assert final.get("growth_points_error")
     assert "scenario gone" in final["growth_points_error"]
+
+
+def test_turn_service_returns_corrections_in_result(tmp_path, mocker):
+    """turn_service now uses ChatTurn — TurnResult includes per-turn corrections."""
+    from tutor.web.services import turn_service, start_session_service
+    deps = _make_deps(tmp_path)
+    # start_session_service uses plain LLM (returns string)
+    deps.llm.complete.return_value = "Opening."
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+
+    # Now configure LLM to return ChatTurn JSON for the turn
+    deps.asr.transcribe.return_value = "I goed there"
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "Where did you go?",
+        "corrections": [{
+            "tag": "grammar",
+            "user_utterance": "I goed",
+            "corrected_version": "I went",
+            "explanation": "Past tense of 'go' is 'went'.",
+        }],
+    })
+    result = turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+    assert result.user_text == "I goed there"
+    assert result.assistant_text == "Where did you go?"
+    assert len(result.corrections) == 1
+    assert result.corrections[0]["tag"] == "grammar"
+    assert result.corrections[0]["corrected_version"] == "I went"
+
+
+def test_turn_service_persists_corrections_in_storage(tmp_path, mocker):
+    """The turn dict in session.json has a corrections field after the turn."""
+    from tutor.web.services import turn_service, start_session_service
+    deps = _make_deps(tmp_path)
+    deps.llm.complete.return_value = "Opening."
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+
+    deps.asr.transcribe.return_value = "I goed"
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "Where?",
+        "corrections": [{
+            "tag": "grammar",
+            "user_utterance": "I goed",
+            "corrected_version": "I went",
+            "explanation": "Past tense.",
+        }],
+    })
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+    data = deps.storage.load_session(s.session_id)
+    assert len(data["turns"]) == 1
+    assert data["turns"][0]["corrections"][0]["corrected_version"] == "I went"
+
+
+def test_turn_service_handles_empty_corrections(tmp_path, mocker):
+    """Clean message: LLM returns []. Turn still saves, corrections stored as empty list."""
+    from tutor.web.services import turn_service, start_session_service
+    deps = _make_deps(tmp_path)
+    deps.llm.complete.return_value = "Opening."
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+
+    deps.asr.transcribe.return_value = "I went to the store."
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "What did you buy?",
+        "corrections": [],
+    })
+    result = turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+    assert result.corrections == []
+    data = deps.storage.load_session(s.session_id)
+    assert data["turns"][0]["corrections"] == []
