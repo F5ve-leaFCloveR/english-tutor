@@ -8,18 +8,21 @@ from typing import Literal
 from pydantic import BaseModel, ValidationError
 
 from tutor.llm import LLMClient
+from tutor.scenarios.loader import Scenario, build_system_prompt
 
 log = logging.getLogger(__name__)
 
 
-_SYSTEM_PROMPT = """You are a friendly English conversational partner for a Russian-native intermediate student.
+_DEFAULT_CHAT_INTRO = """You are a friendly English conversational partner for a Russian-native intermediate student.
 
-Your job each turn:
-1. Reply naturally and conversationally in 2-4 sentences. Match the user's tone. Ask follow-up questions when natural.
-2. Identify up to 3 corrections to the user's MOST RECENT message only. Focus on:
-   - vocab: word choice that's correct but weak/generic. Suggest a stronger, more precise word.
-   - grammar: tense, articles, prepositions, word order errors.
-   Skip filler words, typos, idiom/register issues, minor style preferences. If the message is clean, return an empty list.
+Reply naturally and conversationally in 2-4 sentences. Match the user's tone. Ask follow-up questions when natural.
+"""
+
+
+_CORRECTION_INSTRUCTIONS = """In the SAME response, identify up to 3 corrections to the user's MOST RECENT message only. Focus on:
+  - vocab: word choice that's correct but weak/generic. Suggest a stronger, more precise word.
+  - grammar: tense, articles, prepositions, word order errors.
+Skip filler words, typos, idiom/register issues, minor style preferences. If the message is clean, return an empty list.
 
 Return STRICT JSON, no commentary:
 {
@@ -34,6 +37,9 @@ Return STRICT JSON, no commentary:
   ]
 }
 """
+
+
+_DEFAULT_CHAT_SYSTEM_PROMPT = _DEFAULT_CHAT_INTRO + "\n" + _CORRECTION_INSTRUCTIONS
 
 
 _FALLBACK_REPLY = "Sorry, I had trouble responding. Could you say that again?"
@@ -51,10 +57,22 @@ class ChatResponse(BaseModel):
     corrections: list[ChatCorrection]
 
 
+def build_session_chat_prompt(scenario: Scenario, user_native_language: str = "Russian") -> str:
+    """System prompt for a voice session: scenario role-play + JSON correction rules."""
+    role_play = build_system_prompt(scenario, user_native_language=user_native_language)
+    return role_play + "\n\n" + _CORRECTION_INSTRUCTIONS
+
+
 class ChatTurn:
-    def __init__(self, llm: LLMClient, model: str) -> None:
+    def __init__(
+        self,
+        llm: LLMClient,
+        model: str,
+        system_prompt: str | None = None,
+    ) -> None:
         self._llm = llm
         self._model = model
+        self._system_prompt = system_prompt or _DEFAULT_CHAT_SYSTEM_PROMPT
 
     def respond(
         self,
@@ -62,7 +80,7 @@ class ChatTurn:
         message: str,
     ) -> ChatResponse:
         """One turn: LLM replies AND returns corrections for the latest user message."""
-        messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": self._system_prompt}]
         for h in history:
             messages.append({"role": h["role"], "content": h["content"]})
         messages.append({"role": "user", "content": message})

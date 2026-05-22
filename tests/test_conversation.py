@@ -109,3 +109,47 @@ def test_chat_turn_includes_history_in_llm_call():
     assert messages[1] == {"role": "user", "content": "Hello"}
     assert messages[2] == {"role": "assistant", "content": "Hi! How are you?"}
     assert messages[-1] == {"role": "user", "content": "I am fine"}
+
+
+def test_chat_turn_accepts_custom_system_prompt():
+    from tutor.conversation import ChatTurn
+    import json
+    from unittest.mock import MagicMock
+
+    llm = MagicMock()
+    llm.complete.return_value = json.dumps({"reply": "ok", "corrections": []})
+    custom_prompt = "You are a strict English teacher. Respond curtly."
+    chat = ChatTurn(llm=llm, model="m", system_prompt=custom_prompt)
+    chat.respond(history=[], message="hi")
+    sent_messages = llm.complete.call_args.kwargs["messages"]
+    assert sent_messages[0]["role"] == "system"
+    assert sent_messages[0]["content"] == custom_prompt
+
+
+def test_chat_turn_default_system_prompt_unchanged():
+    """Default prompt path remains the friendly-partner chat prompt."""
+    from tutor.conversation import ChatTurn
+    import json
+    from unittest.mock import MagicMock
+
+    llm = MagicMock()
+    llm.complete.return_value = json.dumps({"reply": "ok", "corrections": []})
+    chat = ChatTurn(llm=llm, model="m")
+    chat.respond(history=[], message="hi")
+    sent_messages = llm.complete.call_args.kwargs["messages"]
+    assert "friendly English conversational partner" in sent_messages[0]["content"]
+
+
+def test_build_session_chat_prompt_combines_scenario_and_corrections():
+    from tutor.conversation import build_session_chat_prompt
+    from tutor.scenarios.loader import load_scenario
+
+    scenario = load_scenario("tech_interview_behavioral")
+    prompt = build_session_chat_prompt(scenario, user_native_language="Russian")
+    # Scenario role-play content present
+    assert "tech_interview_behavioral" in prompt or "interview" in prompt.lower()
+    # Correction-output JSON instructions present
+    assert "STRICT JSON" in prompt
+    assert "\"corrections\"" in prompt
+    assert "vocab" in prompt
+    assert "grammar" in prompt
