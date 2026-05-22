@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api, ApiError } from "../api/client";
+import type { ChatCorrectionDict } from "../api/types";
 import { MessageBubble } from "../components/MessageBubble";
+import { InlineCorrection } from "../components/InlineCorrection";
 import { PushToTalkButton } from "../components/PushToTalkButton";
 import { useRecorder } from "../hooks/useRecorder";
 import { useTTS } from "../hooks/useTTS";
@@ -10,6 +12,7 @@ import { useTTS } from "../hooks/useTTS";
 interface ChatMessage {
   role: "user" | "assistant";
   text: string;
+  corrections?: ChatCorrectionDict[];
 }
 
 export function SessionPage() {
@@ -42,7 +45,7 @@ export function SessionPage() {
       const msgs: ChatMessage[] = [];
       if (data.opening_text) msgs.push({ role: "assistant", text: data.opening_text });
       for (const t of data.turns) {
-        msgs.push({ role: "user", text: t.user_text });
+        msgs.push({ role: "user", text: t.user_text, corrections: t.corrections ?? [] });
         msgs.push({ role: "assistant", text: t.llm_text });
       }
       setMessages(msgs);
@@ -64,7 +67,7 @@ export function SessionPage() {
     onSuccess: async (result) => {
       setMessages((prev) => [
         ...prev,
-        { role: "user", text: result.user_text },
+        { role: "user", text: result.user_text, corrections: result.corrections ?? [] },
         { role: "assistant", text: result.assistant_text },
       ]);
       try {
@@ -122,12 +125,23 @@ export function SessionPage() {
           </div>
         )}
         {messages.map((m, i) => (
-          <MessageBubble
-            key={i}
-            role={m.role}
-            text={m.text}
-            isSpeaking={m.role === "assistant" && tts.isSpeaking && i === messages.length - 1}
-          />
+          <div key={i}>
+            <MessageBubble
+              role={m.role}
+              text={m.text}
+              isSpeaking={m.role === "assistant" && tts.isSpeaking && i === messages.length - 1}
+            />
+            {m.role === "user" && m.corrections && m.corrections.length > 0 && (
+              <div>
+                {m.corrections.map((c, j) => (
+                  <InlineCorrection
+                    key={j}
+                    growth_point={{ ...c, context: null }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         ))}
       </div>
       <div className="border-t bg-white px-4 py-4 flex items-center justify-center gap-6">

@@ -12,6 +12,7 @@ export interface StartSessionResult {
 export interface TurnResult {
   user_text: string;
   assistant_text: string;
+  corrections: ChatCorrectionDict[];
 }
 
 export interface SessionData {
@@ -20,7 +21,7 @@ export interface SessionData {
   started_at: string;
   ended_at: string | null;
   opening_text: string | null;
-  turns: Array<{ ts: string; user_text: string; llm_text: string }>;
+  turns: Array<{ ts: string; user_text: string; llm_text: string; corrections?: ChatCorrectionDict[] }>;
   growth_points?: GrowthPointDict[];
   cards_created?: string[];
   growth_points_error?: string | null;
