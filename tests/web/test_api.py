@@ -338,3 +338,30 @@ def test_get_scenarios_marks_custom(tmp_path, mocker):
     )
     assert found_builtin is not None
     assert found_builtin["is_custom"] is False
+
+
+def test_post_grade_practice_only_does_not_update_srs(tmp_path, mocker):
+    """practice_only=true grades the attempt but skips SRS scheduling update."""
+    client, deps = _client(tmp_path, mocker)
+    from tutor.evaluator import GrowthPoint
+    deps.srs.create_cards(
+        [GrowthPoint(tag="grammar", user_utterance="I goed",
+                     corrected_version="I went", explanation="x", context=None)],
+        session_id="s1",
+    )
+    card = deps.srs.all_cards()[0]
+    original_due = card.due_date
+    original_reps = card.repetitions
+
+    deps.asr.transcribe.return_value = "I went"
+    deps.llm.complete.return_value = "5"  # grader returns 5
+
+    audio_blob = b"audio-bytes"
+    files = {"audio": ("test.webm", audio_blob, "audio/webm")}
+    r = client.post(f"/api/review/{card.id}/grade?practice_only=true", files=files)
+    assert r.status_code == 200, r.text
+
+    # SRS state unchanged
+    card_after = deps.srs.load_card(card.id)
+    assert card_after.due_date == original_due
+    assert card_after.repetitions == original_reps

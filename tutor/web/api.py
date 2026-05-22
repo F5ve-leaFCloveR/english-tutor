@@ -143,11 +143,13 @@ def create_app(deps: Dependencies | None = None) -> FastAPI:
         card_id: str,
         audio: UploadFile | None = File(None),
         skip: bool = False,
+        practice_only: bool = False,
         d: Dependencies = Depends(get_deps),
     ):
         audio_bytes = await audio.read() if audio is not None else None
         return services.grade_card_service(
-            d, card_id=card_id, audio_bytes=audio_bytes, skip=skip
+            d, card_id=card_id, audio_bytes=audio_bytes, skip=skip,
+            practice_only=practice_only,
         )
 
     @app.get("/api/stats")

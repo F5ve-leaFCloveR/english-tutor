@@ -226,7 +226,11 @@ def review_due_service(
 
 
 def grade_card_service(
-    deps: Dependencies, card_id: str, audio_bytes: bytes | None, skip: bool
+    deps: Dependencies,
+    card_id: str,
+    audio_bytes: bytes | None,
+    skip: bool,
+    practice_only: bool = False,
 ) -> GradeResult:
     card = deps.srs.load_card(card_id)  # raises CardNotFoundError
 
@@ -251,15 +255,16 @@ def grade_card_service(
             grader = LLMGrader(llm=deps.llm, model=deps.grader_model)
             quality = grader.grade(target=card.corrected_version, attempt=user_attempt_text)
 
-    deps.srs.record_review(card_id, quality=quality)
-    updated = deps.srs.load_card(card_id)
+    if not practice_only:
+        deps.srs.record_review(card_id, quality=quality)
+    final_card = deps.srs.load_card(card_id)
     return GradeResult(
         card_id=card_id,
         user_attempt_text=user_attempt_text,
         quality=quality,
         target=card.corrected_version,
         explanation=card.explanation,
-        next_due=updated.due_date,
+        next_due=final_card.due_date,
     )
 
 
