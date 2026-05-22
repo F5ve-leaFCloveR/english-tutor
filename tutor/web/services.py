@@ -90,10 +90,26 @@ def start_session_service(deps: Dependencies, scenario_id: str) -> StartSessionR
     scenario = load_scenario(scenario_id)  # raises ScenarioNotFoundError
     session_id = deps.storage.create_session(scenario_id=scenario.id)
 
-    system_prompt = build_system_prompt(scenario, user_native_language="Russian")
-    opening = deps.llm.complete(
-        messages=[{"role": "system", "content": system_prompt}],
-    )
+    # If the scenario provides a canonical opening_line (all built-ins do; custom
+    # scenarios do when the user wrote one), use it directly — no LLM call needed.
+    # This avoids the LLM hallucinating placeholder-laden openings for minimal
+    # custom prompts.
+    if scenario.opening_line and scenario.opening_line.strip():
+        opening = scenario.opening_line.strip()
+    else:
+        # No opening_line provided (custom scenario with blank field). Ask the LLM
+        # with explicit anti-placeholder instructions.
+        system_prompt = build_system_prompt(scenario, user_native_language="Russian")
+        opening_instruction = (
+            "\n\nNow write the FIRST message you would say to start the conversation. "
+            "Stay in role. Write a complete short natural greeting (1-2 sentences). "
+            "Do NOT include placeholders like [Name], [Number], [topic] — write a real "
+            "opening as if you are actually speaking to the user. No square brackets."
+        )
+        opening = deps.llm.complete(
+            messages=[{"role": "system", "content": system_prompt + opening_instruction}],
+        )
+
     deps.storage.set_opening_text(session_id, opening)
     return StartSessionResult(session_id=session_id, opening_text=opening)
 

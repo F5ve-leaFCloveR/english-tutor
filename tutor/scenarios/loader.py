@@ -29,9 +29,6 @@ class Scenario:
     system_prompt_template: str
 
 
-_DEFAULT_CUSTOM_OPENING = "Hi! Let's get started."
-
-
 def _custom_storage_path() -> Path:
     return Path(os.getenv("CUSTOM_SCENARIOS_PATH", "custom_scenarios.json"))
 
@@ -82,7 +79,7 @@ def load_scenario(scenario_id: str) -> Scenario:
         counterpart={},
         goal="",
         vocab_focus=[],
-        opening_line=(custom.get("opening_line") or _DEFAULT_CUSTOM_OPENING).strip(),
+        opening_line=(custom.get("opening_line") or "").strip(),
         system_prompt_template=custom["system_prompt"],
     )
 

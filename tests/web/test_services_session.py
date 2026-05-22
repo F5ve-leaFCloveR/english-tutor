@@ -42,15 +42,15 @@ def test_list_scenarios_service_returns_summaries(tmp_path):
 def test_start_session_service_persists_opening(tmp_path):
     from tutor.web.services import start_session_service
     deps = _make_deps(tmp_path)
-    deps.llm.complete.return_value = "Hi there, tell me about yourself."
+    # Built-in scenarios use their YAML opening_line directly — no LLM call.
 
     result = start_session_service(deps, scenario_id="tech_interview_behavioral")
     assert result.session_id
-    assert result.opening_text == "Hi there, tell me about yourself."
+    assert "tell me a bit about yourself" in result.opening_text.lower()
 
     data = deps.storage.load_session(result.session_id)
     assert data["scenario_id"] == "tech_interview_behavioral"
-    assert data["opening_text"] == "Hi there, tell me about yourself."
+    assert data["opening_text"] == result.opening_text
 
 
 def test_start_session_service_raises_on_unknown_scenario(tmp_path):
@@ -64,12 +64,12 @@ def test_start_session_service_raises_on_unknown_scenario(tmp_path):
 def test_get_session_service_returns_full_dict(tmp_path):
     from tutor.web.services import get_session_service, start_session_service
     deps = _make_deps(tmp_path)
-    deps.llm.complete.return_value = "Hi."
+    # Built-in scenario uses canonical opening from YAML — no LLM call.
 
     started = start_session_service(deps, scenario_id="tech_interview_behavioral")
     full = get_session_service(deps, started.session_id)
     assert full["session_id"] == started.session_id
-    assert full["opening_text"] == "Hi."
+    assert full["opening_text"] == started.opening_text
     assert full["turns"] == []
 
 
@@ -351,3 +351,36 @@ def test_turn_service_handles_empty_corrections(tmp_path, mocker):
     assert result.corrections == []
     data = deps.storage.load_session(s.session_id)
     assert data["turns"][0]["corrections"] == []
+
+
+def test_start_session_uses_canonical_opening_when_provided(tmp_path, mocker):
+    """If scenario has opening_line, use it directly — no LLM call for opening."""
+    from tutor.web.services import start_session_service
+    deps = _make_deps(tmp_path)
+    # Don't pre-configure deps.llm.complete — if start_session calls it, the test fails
+    # because MagicMock returns a Mock object which isn't a str (would crash set_opening_text).
+    deps.llm.complete.side_effect = AssertionError("LLM should not be called for opening")
+    result = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    # The opening comes from the YAML scenario.opening_line
+    assert "thanks for taking the time" in result.opening_text.lower() \
+        or "tell me a bit about yourself" in result.opening_text.lower()
+    deps.llm.complete.assert_not_called()
+
+
+def test_start_session_falls_back_to_llm_when_no_opening(tmp_path, mocker, monkeypatch):
+    """Custom scenario with empty opening_line: call LLM with no-placeholder instruction."""
+    monkeypatch.setenv("CUSTOM_SCENARIOS_PATH", str(tmp_path / "custom.json"))
+    from tutor.scenarios.custom_storage import CustomScenarioStorage
+    storage = CustomScenarioStorage(path=tmp_path / "custom.json")
+    storage.create(name="Dog Breeder", difficulty="easy",
+                   system_prompt="You are a dog breeder.", opening_line="")
+
+    from tutor.web.services import start_session_service
+    deps = _make_deps(tmp_path)
+    deps.llm.complete.return_value = "Hello, looking for a puppy?"
+    result = start_session_service(deps, scenario_id="dog-breeder")
+    assert result.opening_text == "Hello, looking for a puppy?"
+    # Verify the LLM was called with the no-placeholder instruction
+    call_kwargs = deps.llm.complete.call_args.kwargs
+    sys_msg = call_kwargs["messages"][0]["content"]
+    assert "placeholder" in sys_msg.lower() or "no square brackets" in sys_msg.lower()

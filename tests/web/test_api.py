@@ -58,7 +58,8 @@ def test_post_session_creates_and_returns_opening(tmp_path, mocker):
     assert r.status_code == 200
     body = r.json()
     assert body["session_id"]
-    assert body["opening_text"] == "Opening line."
+    # Built-in scenarios use their YAML opening_line directly (no LLM call).
+    assert "tell me a bit about yourself" in body["opening_text"].lower()
 
 
 def test_post_session_unknown_scenario_404(tmp_path, mocker):
@@ -75,7 +76,8 @@ def test_get_session_returns_full_dict(tmp_path, mocker):
     r2 = client.get(f"/api/sessions/{sid}")
     assert r2.status_code == 200
     assert r2.json()["session_id"] == sid
-    assert r2.json()["opening_text"] == "Opening line."
+    # Built-in scenarios use their YAML opening_line directly (no LLM call).
+    assert "tell me a bit about yourself" in r2.json()["opening_text"].lower()
 
 
 def test_get_session_unknown_404(tmp_path, mocker):

@@ -64,7 +64,7 @@ def test_load_scenario_builtin_wins_on_id_clash(monkeypatch, tmp_path):
 
 
 def test_load_scenario_uses_empty_opening_default(monkeypatch, tmp_path):
-    """Custom scenario without opening_line gets a sensible default."""
+    """Custom scenario without opening_line returns empty string (no default fill)."""
     monkeypatch.setenv("CUSTOM_SCENARIOS_PATH", str(tmp_path / "custom.json"))
     from tutor.scenarios.custom_storage import CustomScenarioStorage
     storage = CustomScenarioStorage(path=tmp_path / "custom.json")
@@ -72,4 +72,4 @@ def test_load_scenario_uses_empty_opening_default(monkeypatch, tmp_path):
 
     from tutor.scenarios.loader import load_scenario
     s = load_scenario("no-opening")
-    assert s.opening_line  # non-empty default
+    assert s.opening_line == ""
