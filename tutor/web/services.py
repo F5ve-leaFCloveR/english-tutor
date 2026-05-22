@@ -8,7 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from tutor.conversation import ChatTurn, build_session_chat_prompt
-from tutor.evaluator import Evaluator
+from tutor.evaluator import Evaluator, GrowthPoint
 from tutor.grader import LLMGrader
 from tutor.scenarios.loader import (
     Scenario,
@@ -109,66 +109,62 @@ def turn_service(deps: Dependencies, session_id: str, audio_bytes: bytes) -> Tur
             pass
 
 
+def _aggregate_corrections(turns: list[dict]) -> list[dict]:
+    """Union per-turn corrections, dedupe by lowercased+stripped user_utterance.
+    Preserves first-occurrence order."""
+    seen: set[str] = set()
+    out: list[dict] = []
+    for t in turns:
+        for c in t.get("corrections", []) or []:
+            key = c.get("user_utterance", "").strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(c)
+    return out
+
+
 def end_session_service(deps: Dependencies, session_id: str) -> EndSessionResult:
     try:
         session_data = deps.storage.load_session(session_id)
     except FileNotFoundError as e:
         raise SessionNotFoundError(session_id) from e
 
-    # Set ended_at FIRST so the session immediately appears in /review (as Analyzing).
-    # The evaluator below may take several seconds; without this, /review filters
-    # the session out until the evaluator completes.
+    # Set ended_at FIRST so the session immediately appears in /review.
     deps.storage.end_session(session_id)
 
     turns = session_data.get("turns", [])
-    growth_points_dicts: list[dict] = []
+    aggregated = _aggregate_corrections(turns)
+
+    deps.storage.set_growth_points(session_id, aggregated)
+
     cards_created_ids: list[str] = []
     growth_points_error: str | None = None
-
-    if turns:
+    if aggregated:
         try:
-            scenario = load_scenario(session_data["scenario_id"])
-            system_prompt = build_system_prompt(scenario, user_native_language="Russian")
-            history: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-            if session_data.get("opening_text"):
-                history.append({"role": "assistant", "content": session_data["opening_text"]})
-            for turn in turns:
-                history.append({"role": "user", "content": turn["user_text"]})
-                history.append({"role": "assistant", "content": turn["llm_text"]})
-
-            evaluator = Evaluator(llm=deps.llm, model=deps.evaluator_model)
-            growth_points = evaluator.evaluate(transcript=history)
-        except Exception as e:
-            log.warning("Evaluator pipeline raised: %s", e)
-            growth_points = []
-            growth_points_error = str(e)
-            deps.storage.set_growth_points_error(session_id, growth_points_error)
-
-        if growth_points_error is None:
-            growth_points_dicts = [
-                gp.model_dump() if hasattr(gp, "model_dump") else asdict(gp)
-                for gp in growth_points
+            growth_point_objs = [
+                GrowthPoint(
+                    tag=c["tag"],
+                    user_utterance=c["user_utterance"],
+                    corrected_version=c["corrected_version"],
+                    explanation=c["explanation"],
+                    context=c.get("context"),
+                )
+                for c in aggregated
             ]
-            deps.storage.set_growth_points(session_id, growth_points_dicts)
-
-            if growth_points:
-                try:
-                    cards = deps.srs.create_cards(growth_points, session_id=session_id)
-                    cards_created_ids = [c.id for c in cards]
-                    deps.storage.set_cards_created(session_id, cards_created_ids)
-                except Exception as e:
-                    log.warning("SRS create_cards failed: %s", e)
-                    growth_points_error = f"create_cards failed: {e}"
-                    deps.storage.set_growth_points_error(session_id, growth_points_error)
-    else:
-        # 0-turn session: nothing to evaluate, but mark analysis done so /review doesn't poll forever
-        deps.storage.set_growth_points(session_id, [])
+            cards = deps.srs.create_cards(growth_point_objs, session_id=session_id)
+            cards_created_ids = [c.id for c in cards]
+            deps.storage.set_cards_created(session_id, cards_created_ids)
+        except Exception as e:
+            log.warning("SRS create_cards failed: %s", e)
+            growth_points_error = f"create_cards failed: {e}"
+            deps.storage.set_growth_points_error(session_id, growth_points_error)
 
     final = deps.storage.load_session(session_id)
     return EndSessionResult(
         session_id=session_id,
         ended_at=final.get("ended_at"),
-        growth_points=growth_points_dicts,
+        growth_points=aggregated,
         cards_created=cards_created_ids,
         growth_points_error=growth_points_error,
     )

@@ -121,32 +121,6 @@ def test_list_sessions_service_empty_when_none(tmp_path):
     assert list_sessions_service(deps, limit=10) == []
 
 
-def test_end_session_persists_empty_growth_points_when_evaluator_returns_empty(tmp_path, mocker):
-    """Regression: clean sessions (no corrections) must still mark analysis done.
-
-    Frontend distinguishes "analyzing" from "clean" by presence of `growth_points`
-    field. If we never write the field, the page polls forever.
-    """
-    from tutor.web.services import end_session_service, start_session_service, turn_service
-    deps = _make_deps(tmp_path)
-    deps.llm.complete.return_value = "Hi."
-
-    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
-    # Add one turn so the evaluator path runs
-    deps.asr.transcribe.return_value = "I work in IT"
-    deps.llm.complete.return_value = json.dumps({"reply": "Great.", "corrections": []})
-    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
-
-    # Patch the Evaluator to return empty growth_points
-    mocker.patch("tutor.web.services.Evaluator").return_value.evaluate.return_value = []
-
-    end_session_service(deps, session_id=s.session_id)
-    final = deps.storage.load_session(s.session_id)
-    assert "growth_points" in final
-    assert final["growth_points"] == []
-    assert final.get("growth_points_error") in (None, "")
-
-
 def test_end_session_persists_empty_growth_points_for_zero_turn_session(tmp_path, mocker):
     """0-turn session: skipping the evaluator must still mark analysis done."""
     from tutor.web.services import end_session_service, start_session_service
@@ -162,60 +136,153 @@ def test_end_session_persists_empty_growth_points_for_zero_turn_session(tmp_path
     assert final["growth_points"] == []
 
 
-def test_end_session_sets_ended_at_before_evaluator_runs(tmp_path, mocker):
-    """Regression: frontend shows just-ended session as 'Analyzing' immediately.
-
-    If `storage.end_session(id)` is called AFTER the evaluator, the session is
-    invisible in /review during the evaluator's 5-10s run. We want the session
-    to appear as soon as it ends — with growth_points still missing — so /review
-    shows the Analyzing state, then transitions to ready.
-    """
+def test_end_session_sets_ended_at_first(tmp_path, mocker):
+    """Regression: ended_at must be set before SRS card creation."""
+    import json
     from tutor.web.services import end_session_service, start_session_service, turn_service
     deps = _make_deps(tmp_path)
-
-    deps.llm.complete.return_value = "Hi."
+    deps.srs = MagicMock()
+    deps.llm.complete.return_value = "Opening."
     s = start_session_service(deps, scenario_id="tech_interview_behavioral")
-    deps.asr.transcribe.return_value = "I work in IT"
-    deps.llm.complete.return_value = json.dumps({"reply": "Great.", "corrections": []})
-    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
 
-    # Capture storage state at the moment the evaluator runs
     captured = {}
-    def fake_evaluate(transcript):
-        snapshot = deps.storage.load_session(s.session_id)
+    def fake_create_cards(growth_points, session_id):
+        snapshot = deps.storage.load_session(session_id)
         captured["ended_at"] = snapshot.get("ended_at")
         return []
-    mocker.patch("tutor.web.services.Evaluator").return_value.evaluate.side_effect = fake_evaluate
+    deps.srs.create_cards.side_effect = fake_create_cards
 
+    deps.asr.transcribe.return_value = "I goed"
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "ok",
+        "corrections": [{"tag": "grammar", "user_utterance": "I goed",
+                         "corrected_version": "I went", "explanation": "Past tense."}],
+    })
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
     end_session_service(deps, session_id=s.session_id)
-
-    assert captured["ended_at"], (
-        f"ended_at should be set BEFORE the evaluator runs, got {captured['ended_at']!r}"
-    )
+    assert captured["ended_at"], "ended_at must be set before create_cards runs"
 
 
-def test_end_session_writes_error_when_setup_raises(tmp_path, mocker):
-    """Regression: if load_scenario or other pre-evaluator setup raises, the session
-    must still get growth_points_error written so it doesn't stay Analyzing forever.
-    """
+def test_end_session_aggregates_per_turn_corrections(tmp_path, mocker):
+    """End simply unions per-turn corrections into growth_points (no Evaluator call)."""
+    import json
     from tutor.web.services import end_session_service, start_session_service, turn_service
     deps = _make_deps(tmp_path)
-    deps.llm.complete.return_value = "Hi."
-
+    deps.llm.complete.return_value = "Opening."
     s = start_session_service(deps, scenario_id="tech_interview_behavioral")
-    deps.asr.transcribe.return_value = "I work in IT"
-    deps.llm.complete.return_value = json.dumps({"reply": "Great.", "corrections": []})
+
+    # Turn 1: 1 correction
+    deps.asr.transcribe.return_value = "I goed"
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "Where?",
+        "corrections": [{
+            "tag": "grammar", "user_utterance": "I goed",
+            "corrected_version": "I went", "explanation": "Past tense.",
+        }],
+    })
     turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
 
-    # Simulate a non-evaluator exception (e.g., load_scenario blowing up)
-    mocker.patch("tutor.web.services.load_scenario", side_effect=RuntimeError("scenario gone"))
+    # Turn 2: 1 different correction
+    deps.asr.transcribe.return_value = "more better"
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "Interesting.",
+        "corrections": [{
+            "tag": "grammar", "user_utterance": "more better",
+            "corrected_version": "better", "explanation": "'More' redundant with comparative.",
+        }],
+    })
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+
+    result = end_session_service(deps, session_id=s.session_id)
+    assert len(result.growth_points) == 2
+    user_utts = [gp["user_utterance"] for gp in result.growth_points]
+    assert "I goed" in user_utts
+    assert "more better" in user_utts
+
+
+def test_end_session_dedupes_corrections_by_user_utterance(tmp_path, mocker):
+    """Same user_utterance across turns dedupes to one growth_point."""
+    import json
+    from tutor.web.services import end_session_service, start_session_service, turn_service
+    deps = _make_deps(tmp_path)
+    deps.llm.complete.return_value = "Opening."
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+
+    correction = {
+        "tag": "grammar", "user_utterance": "I goed",
+        "corrected_version": "I went", "explanation": "Past tense.",
+    }
+    deps.asr.transcribe.return_value = "I goed there"
+    deps.llm.complete.return_value = json.dumps({"reply": "ok", "corrections": [correction]})
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+
+    deps.asr.transcribe.return_value = "I goed home"
+    deps.llm.complete.return_value = json.dumps({"reply": "ok", "corrections": [correction]})
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+
+    result = end_session_service(deps, session_id=s.session_id)
+    assert len(result.growth_points) == 1
+
+
+def test_end_session_does_not_call_evaluator(tmp_path, mocker):
+    """Regression: Stage 2e drops the separate Evaluator pass."""
+    import json
+    from tutor.web.services import end_session_service, start_session_service, turn_service
+    deps = _make_deps(tmp_path)
+    deps.llm.complete.return_value = "Opening."
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    deps.asr.transcribe.return_value = "I goed"
+    deps.llm.complete.return_value = json.dumps({"reply": "ok", "corrections": []})
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+
+    evaluator_mock = mocker.patch("tutor.web.services.Evaluator")
+    end_session_service(deps, session_id=s.session_id)
+    evaluator_mock.return_value.evaluate.assert_not_called()
+
+
+def test_end_session_creates_srs_cards_from_aggregated(tmp_path, mocker):
+    """SRS cards created from aggregated per-turn corrections."""
+    import json
+    from tutor.web.services import end_session_service, start_session_service, turn_service
+    deps = _make_deps(tmp_path)
+    deps.srs = MagicMock()
+    deps.srs.create_cards.return_value = []
+    deps.llm.complete.return_value = "Opening."
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    deps.asr.transcribe.return_value = "I goed"
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "ok",
+        "corrections": [{
+            "tag": "grammar", "user_utterance": "I goed",
+            "corrected_version": "I went", "explanation": "Past tense.",
+        }],
+    })
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
 
     end_session_service(deps, session_id=s.session_id)
-    final = deps.storage.load_session(s.session_id)
+    deps.srs.create_cards.assert_called_once()
+    args, kwargs = deps.srs.create_cards.call_args
+    growth_points_passed = args[0] if args else kwargs.get("growth_points")
+    # Argument is a list of GrowthPoint instances
+    assert len(growth_points_passed) == 1
+    gp = growth_points_passed[0]
+    assert gp.user_utterance == "I goed"
 
-    assert final.get("ended_at")
-    assert final.get("growth_points_error")
-    assert "scenario gone" in final["growth_points_error"]
+
+def test_end_session_no_cards_when_no_corrections(tmp_path, mocker):
+    """Clean session (no per-turn corrections) → no SRS card creation."""
+    import json
+    from tutor.web.services import end_session_service, start_session_service, turn_service
+    deps = _make_deps(tmp_path)
+    deps.srs = MagicMock()
+    deps.llm.complete.return_value = "Opening."
+    s = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    deps.asr.transcribe.return_value = "I went to the store."
+    deps.llm.complete.return_value = json.dumps({"reply": "Nice.", "corrections": []})
+    turn_service(deps, session_id=s.session_id, audio_bytes=b"...")
+
+    end_session_service(deps, session_id=s.session_id)
+    deps.srs.create_cards.assert_not_called()
 
 
 def test_turn_service_returns_corrections_in_result(tmp_path, mocker):

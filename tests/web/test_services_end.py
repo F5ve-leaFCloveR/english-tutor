@@ -26,23 +26,23 @@ def _deps(tmp_path):
 
 
 def test_end_session_service_happy_path(tmp_path, mocker):
+    import json
     from tutor.web.services import start_session_service, turn_service, end_session_service
-    from tutor.evaluator import GrowthPoint
 
     deps = _deps(tmp_path)
     deps.llm.complete.return_value = "Hi."
     deps.asr.transcribe.return_value = "I made a project"
 
     started = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "Tell me more.",
+        "corrections": [{
+            "tag": "vocab", "user_utterance": "I made a project",
+            "corrected_version": "I led a project",
+            "explanation": "led signals ownership",
+        }],
+    })
     turn_service(deps, started.session_id, audio_bytes=b"x")
-
-    fake_eval = MagicMock()
-    fake_eval.evaluate.return_value = [
-        GrowthPoint(tag="vocab", user_utterance="I made a project",
-                    corrected_version="I led a project",
-                    explanation="led signals ownership", context=None),
-    ]
-    mocker.patch("tutor.web.services.Evaluator", return_value=fake_eval)
 
     result = end_session_service(deps, session_id=started.session_id)
 
@@ -54,39 +54,42 @@ def test_end_session_service_happy_path(tmp_path, mocker):
     assert result.growth_points_error is None
 
 
-def test_end_session_service_evaluator_raises(tmp_path, mocker):
+def test_end_session_service_create_cards_raises(tmp_path, mocker):
+    """If srs.create_cards fails, growth_points_error is set."""
+    import json
     from tutor.web.services import start_session_service, turn_service, end_session_service
     deps = _deps(tmp_path)
     deps.llm.complete.return_value = "Hi."
-    deps.asr.transcribe.return_value = "hi"
+    deps.asr.transcribe.return_value = "I goed"
 
     started = start_session_service(deps, scenario_id="tech_interview_behavioral")
+    deps.llm.complete.return_value = json.dumps({
+        "reply": "ok",
+        "corrections": [{
+            "tag": "grammar", "user_utterance": "I goed",
+            "corrected_version": "I went", "explanation": "past tense",
+        }],
+    })
     turn_service(deps, started.session_id, audio_bytes=b"x")
 
-    fake_eval = MagicMock()
-    fake_eval.evaluate.side_effect = RuntimeError("api down")
-    mocker.patch("tutor.web.services.Evaluator", return_value=fake_eval)
-
+    mocker.patch.object(deps.srs, "create_cards", side_effect=RuntimeError("disk full"))
     result = end_session_service(deps, session_id=started.session_id)
-    assert result.growth_points == []
     assert result.cards_created == []
-    assert "api down" in (result.growth_points_error or "")
+    assert "disk full" in (result.growth_points_error or "")
 
 
-def test_end_session_service_no_turns_skips_evaluator(tmp_path, mocker):
+def test_end_session_service_no_turns_skips_card_creation(tmp_path, mocker):
     from tutor.web.services import start_session_service, end_session_service
     deps = _deps(tmp_path)
     deps.llm.complete.return_value = "Hi."
 
     started = start_session_service(deps, scenario_id="tech_interview_behavioral")
 
-    fake_eval = MagicMock()
-    mocker.patch("tutor.web.services.Evaluator", return_value=fake_eval)
-
+    mocked_create = mocker.patch.object(deps.srs, "create_cards")
     result = end_session_service(deps, session_id=started.session_id)
     assert result.growth_points == []
     assert result.cards_created == []
-    fake_eval.evaluate.assert_not_called()
+    mocked_create.assert_not_called()
 
 
 def test_end_session_service_raises_on_unknown_session(tmp_path):
