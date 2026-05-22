@@ -13,6 +13,7 @@ export function PracticePage() {
   const tts = useTTS();
   const [index, setIndex] = useState(0);
   const [lastResult, setLastResult] = useState<GradeResult | null>(null);
+  const [retryMode, setRetryMode] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["due-cards"],
@@ -25,8 +26,8 @@ export function PracticePage() {
   });
 
   const gradeMutation = useMutation({
-    mutationFn: async (args: { card_id: string; audio: Blob | null; skip: boolean }) =>
-      api.gradeCard(args.card_id, args.audio, args.skip),
+    mutationFn: async (args: { card_id: string; audio: Blob | null; skip: boolean; practice_only: boolean }) =>
+      api.gradeCard(args.card_id, args.audio, args.skip, args.practice_only),
     onSuccess: async (result) => {
       setLastResult(result);
       try {
@@ -73,7 +74,13 @@ export function PracticePage() {
 
   const advance = () => {
     setLastResult(null);
+    setRetryMode(false);
     setIndex((i) => i + 1);
+  };
+
+  const tryAgain = () => {
+    setLastResult(null);
+    setRetryMode(true);
   };
 
   const handleStart = async () => {
@@ -86,10 +93,10 @@ export function PracticePage() {
   const handleStop = async () => {
     const blob = await recorder.stopRecording();
     if (!blob) return;
-    gradeMutation.mutate({ card_id: card.id, audio: blob, skip: false });
+    gradeMutation.mutate({ card_id: card.id, audio: blob, skip: false, practice_only: retryMode });
   };
   const handleSkip = () => {
-    gradeMutation.mutate({ card_id: card.id, audio: null, skip: true });
+    gradeMutation.mutate({ card_id: card.id, audio: null, skip: true, practice_only: retryMode });
   };
   const handleQuit = () => navigate("/");
 
@@ -106,12 +113,20 @@ export function PracticePage() {
           <div className="text-sm text-slate-600 mb-2">Target:</div>
           <div className="text-lg font-medium text-slate-900 mb-4">"{lastResult.target}"</div>
           <div className="text-sm text-slate-600 mb-6">{lastResult.explanation}</div>
-          <button
-            onClick={advance}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
-          >
-            Next card
-          </button>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={tryAgain}
+              className="border border-slate-300 hover:bg-slate-50 text-slate-700 px-6 py-2 rounded"
+            >
+              Try again
+            </button>
+            <button
+              onClick={advance}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
+            >
+              Next card
+            </button>
+          </div>
         </div>
       ) : (
         <ReviewCard

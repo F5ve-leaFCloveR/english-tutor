@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { ScenariosPage } from "./pages/ScenariosPage";
+import { NewScenarioPage } from "./pages/NewScenarioPage";
 import { SessionPage } from "./pages/SessionPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { ReviewDetail } from "./pages/ReviewDetail";
@@ -13,6 +14,7 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<ScenariosPage />} />
+        <Route path="/scenarios/new" element={<NewScenarioPage />} />
         <Route path="/session/:id" element={<SessionPage />} />
         <Route path="/review" element={<ReviewPage />} />
         <Route path="/review/:sessionId" element={<ReviewDetail />} />
