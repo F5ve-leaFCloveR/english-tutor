@@ -26,6 +26,7 @@ class Dependencies:
     tts_model: str
     tts_voice: str
     chat_model: str = ""
+    custom_scenarios_path: str = "custom_scenarios.json"
 
 
 def build_dependencies(project_root: Path) -> Dependencies:
@@ -56,4 +57,5 @@ def build_dependencies(project_root: Path) -> Dependencies:
         # Free-chat shares the conversational model (settings.openrouter_model).
         # No separate env var: keep things lean until we need a distinct chat model.
         chat_model=settings.openrouter_model,
+        custom_scenarios_path=settings.custom_scenarios_path,
     )

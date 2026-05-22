@@ -14,7 +14,6 @@ from tutor.scenarios.loader import (
     Scenario,
     ScenarioNotFoundError,
     build_system_prompt,
-    list_scenarios,
     load_scenario,
 )
 from tutor.stats import StatsCalculator, StatsSummary
@@ -22,6 +21,7 @@ from tutor.web.deps import Dependencies
 from tutor.web.errors import NoSpeechDetectedError, SessionNotFoundError
 from tutor.web.schemas import (
     BudgetSummary,
+    CustomScenarioCreate,
     DueCardsResult,
     EndSessionResult,
     GradeResult,
@@ -34,11 +34,56 @@ log = logging.getLogger(__name__)
 
 
 def list_scenarios_service(deps: Dependencies) -> list[ScenarioSummary]:
+    """Built-in YAML scenarios + custom JSON scenarios; mark each with is_custom."""
+    from tutor.scenarios.custom_storage import CustomScenarioStorage
+    from tutor.scenarios.loader import SCENARIOS_DIR
+
+    storage = CustomScenarioStorage(path=Path(deps.custom_scenarios_path))
+    custom_scenarios = storage.list_all()
+    builtin_ids = sorted({p.stem for p in SCENARIOS_DIR.glob("*.yaml")})
+
     summaries: list[ScenarioSummary] = []
-    for sid in list_scenarios():
+    # Built-in (always first, sorted)
+    for sid in builtin_ids:
         sc = load_scenario(sid)
-        summaries.append(ScenarioSummary(id=sc.id, name=sc.name, difficulty=sc.difficulty))
+        summaries.append(ScenarioSummary(
+            id=sc.id, name=sc.name, difficulty=sc.difficulty, is_custom=False,
+        ))
+    # Custom (only those NOT shadowed by built-in id)
+    for c in custom_scenarios:
+        if c["id"] in builtin_ids:
+            continue
+        summaries.append(ScenarioSummary(
+            id=c["id"], name=c["name"], difficulty=c["difficulty"], is_custom=True,
+        ))
     return summaries
+
+
+def create_custom_scenario_service(
+    deps: Dependencies, payload: CustomScenarioCreate
+) -> ScenarioSummary:
+    from tutor.scenarios.custom_storage import CustomScenarioStorage
+
+    storage = CustomScenarioStorage(path=Path(deps.custom_scenarios_path))
+    created = storage.create(
+        name=payload.name.strip(),
+        difficulty=payload.difficulty,
+        system_prompt=payload.system_prompt.strip(),
+        opening_line=(payload.opening_line or "").strip(),
+    )
+    return ScenarioSummary(
+        id=created["id"],
+        name=created["name"],
+        difficulty=created["difficulty"],
+        is_custom=True,
+    )
+
+
+def delete_custom_scenario_service(deps: Dependencies, scenario_id: str) -> None:
+    from tutor.scenarios.custom_storage import CustomScenarioStorage
+
+    storage = CustomScenarioStorage(path=Path(deps.custom_scenarios_path))
+    storage.delete(scenario_id)  # raises ScenarioNotFoundError → 404
 
 
 def start_session_service(deps: Dependencies, scenario_id: str) -> StartSessionResult:

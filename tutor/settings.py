@@ -42,6 +42,10 @@ class Settings(BaseSettings):
         default="alloy",
         description="OpenAI TTS voice for backend synthesis",
     )
+    custom_scenarios_path: str = Field(
+        default="custom_scenarios.json",
+        description="Path to the user's custom scenarios JSON file",
+    )
 
     @field_validator("openrouter_api_key", mode="before")
     @classmethod

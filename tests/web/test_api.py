@@ -6,7 +6,7 @@ import io
 import pytest
 
 
-def _client(tmp_path, mocker):
+def _client(tmp_path, mocker, custom_scenarios_path: str | None = None):
     from tutor.web.api import create_app
     from tutor.web.deps import Dependencies
     from tutor.budget import BudgetTracker
@@ -35,6 +35,7 @@ def _client(tmp_path, mocker):
         evaluator_model="m1", grader_model="m2",
         tts_model="m3", tts_voice="v1",
         chat_model="m-chat",
+        custom_scenarios_path=custom_scenarios_path or str(tmp_path / "custom.json"),
     )
     app = create_app(deps=deps)
     from fastapi.testclient import TestClient
@@ -264,3 +265,76 @@ def test_get_sessions_limit_clamped_to_50(tmp_path, mocker):
     client, _ = _client(tmp_path, mocker)
     r = client.get("/api/sessions?limit=999")
     assert r.status_code == 422  # pydantic validation rejects >50
+
+
+def test_post_custom_scenario_returns_summary(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    r = client.post("/api/scenarios/custom", json={
+        "name": "My Talk",
+        "difficulty": "easy",
+        "system_prompt": "You are a friend.",
+        "opening_line": "Hey!",
+    })
+    assert r.status_code == 201
+    data = r.json()
+    assert data["id"] == "my-talk"
+    assert data["name"] == "My Talk"
+    assert data["is_custom"] is True
+
+
+def test_post_custom_scenario_rejects_empty_name(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    r = client.post("/api/scenarios/custom", json={
+        "name": "  ",
+        "difficulty": "easy",
+        "system_prompt": "P",
+    })
+    assert r.status_code == 422
+
+
+def test_post_custom_scenario_rejects_empty_prompt(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    r = client.post("/api/scenarios/custom", json={
+        "name": "X",
+        "difficulty": "easy",
+        "system_prompt": "",
+    })
+    assert r.status_code == 422
+
+
+def test_delete_custom_scenario_removes_it(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    created = client.post("/api/scenarios/custom", json={
+        "name": "Talk", "difficulty": "easy", "system_prompt": "P",
+    }).json()
+    r = client.delete(f"/api/scenarios/custom/{created['id']}")
+    assert r.status_code == 204
+    # Verify gone — list scenarios and check id absent
+    list_resp = client.get("/api/scenarios")
+    items = list_resp.json()["scenarios"]
+    ids = [s["id"] for s in items]
+    assert created["id"] not in ids
+
+
+def test_delete_custom_scenario_missing_returns_404(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    r = client.delete("/api/scenarios/custom/nonexistent")
+    assert r.status_code == 404
+
+
+def test_get_scenarios_marks_custom(tmp_path, mocker):
+    client, _ = _client(tmp_path, mocker)
+    created = client.post("/api/scenarios/custom", json={
+        "name": "Talk", "difficulty": "easy", "system_prompt": "P",
+    }).json()
+    r = client.get("/api/scenarios")
+    items = r.json()["scenarios"]
+    found_custom = next((s for s in items if s["id"] == created["id"]), None)
+    assert found_custom is not None
+    assert found_custom["is_custom"] is True
+    # A built-in scenario should be present with is_custom=False
+    found_builtin = next(
+        (s for s in items if s["id"] == "tech_interview_behavioral"), None
+    )
+    assert found_builtin is not None
+    assert found_builtin["is_custom"] is False

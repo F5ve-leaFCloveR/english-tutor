@@ -1,7 +1,12 @@
 def test_scenario_summary_schema():
     from tutor.web.schemas import ScenarioSummary
     s = ScenarioSummary(id="x", name="X", difficulty="intermediate")
-    assert s.model_dump() == {"id": "x", "name": "X", "difficulty": "intermediate"}
+    assert s.model_dump() == {
+        "id": "x",
+        "name": "X",
+        "difficulty": "intermediate",
+        "is_custom": False,
+    }
 
 
 def test_start_session_request_validates():

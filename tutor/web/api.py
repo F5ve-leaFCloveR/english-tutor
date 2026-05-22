@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 
+from tutor.scenarios.loader import ScenarioNotFoundError
 from tutor.web import services
 from tutor.web.deps import Dependencies, build_dependencies
 from tutor.web.errors import register_exception_handlers
@@ -16,10 +17,12 @@ from tutor.web.schemas import (
     BudgetSummary,
     ChatRequest,
     ChatResponseDict,
+    CustomScenarioCreate,
     DueCardsResult,
     EndSessionAccepted,
     EndSessionResult,
     GradeResult,
+    ScenarioSummary,
     SessionListResult,
     StartSessionRequest,
     StartSessionResult,
@@ -70,6 +73,26 @@ def create_app(deps: Dependencies | None = None) -> FastAPI:
     async def list_scenarios(d: Dependencies = Depends(get_deps)):
         result = services.list_scenarios_service(d)
         return {"scenarios": [s.model_dump() for s in result]}
+
+    @app.post("/api/scenarios/custom", response_model=ScenarioSummary, status_code=201)
+    async def create_custom_scenario(
+        req: CustomScenarioCreate, d: Dependencies = Depends(get_deps)
+    ):
+        if not req.name.strip() or not req.system_prompt.strip():
+            raise HTTPException(
+                status_code=422, detail="name and system_prompt are required"
+            )
+        return services.create_custom_scenario_service(d, req)
+
+    @app.delete("/api/scenarios/custom/{scenario_id}", status_code=204)
+    async def delete_custom_scenario(
+        scenario_id: str, d: Dependencies = Depends(get_deps)
+    ):
+        try:
+            services.delete_custom_scenario_service(d, scenario_id)
+        except ScenarioNotFoundError:
+            raise HTTPException(status_code=404, detail="custom scenario not found")
+        return None
 
     @app.post("/api/sessions", response_model=StartSessionResult)
     async def start_session(req: StartSessionRequest, d: Dependencies = Depends(get_deps)):

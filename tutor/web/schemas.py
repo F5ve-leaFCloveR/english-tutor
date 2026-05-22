@@ -10,6 +10,14 @@ class ScenarioSummary(BaseModel):
     id: str
     name: str
     difficulty: str
+    is_custom: bool = False
+
+
+class CustomScenarioCreate(BaseModel):
+    name: str
+    difficulty: str = "intermediate"
+    system_prompt: str
+    opening_line: str | None = None
 
 
 class StartSessionRequest(BaseModel):
