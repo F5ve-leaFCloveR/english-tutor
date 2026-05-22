@@ -14,6 +14,9 @@ from tutor.evaluator import GrowthPoint
 from tutor.srs import next_interval
 
 
+PER_SESSION_CARD_LIMIT = 5
+
+
 class CardNotFoundError(Exception):
     pass
 
@@ -77,10 +80,28 @@ class SRSEngine:
             raise
 
     def create_cards(self, growth_points: list[GrowthPoint], session_id: str) -> list[Card]:
+        # Cross-session dedupe by lowered+stripped user_utterance
+        existing_keys = {c.user_utterance.lower().strip() for c in self._cards.values()}
+        filtered: list[GrowthPoint] = []
+        for gp in growth_points:
+            key = gp.user_utterance.lower().strip()
+            if not key or key in existing_keys:
+                continue
+            existing_keys.add(key)  # also dedupe within this batch
+            filtered.append(gp)
+
+        # Prioritize: grammar first, vocab second; preserve relative order within tag.
+        filtered.sort(key=lambda gp: 0 if gp.tag == "grammar" else 1)
+
+        # Cap at PER_SESSION_CARD_LIMIT
+        capped = filtered[:PER_SESSION_CARD_LIMIT]
+        if not capped:
+            return []
+
         today = self._now()
         tomorrow = (today + timedelta(days=1)).isoformat()
         new_cards: list[Card] = []
-        for gp in growth_points:
+        for gp in capped:
             card = Card(
                 id=uuid.uuid4().hex[:12],
                 created_from_session_id=session_id,

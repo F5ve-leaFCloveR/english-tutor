@@ -25,18 +25,27 @@ def _deps(tmp_path):
 
 
 def _seed_cards(tmp_path, configs):
-    """configs: list of (tag, repetitions, interval_days, last_quality)."""
+    """configs: list of (tag, repetitions, interval_days, last_quality).
+
+    Chunks of 5 across distinct session_ids so the per-session cap doesn't apply.
+    Mutations are matched to created cards by user_utterance (engine reorders
+    grammar-before-vocab internally, so positional zip is unreliable).
+    """
     from tutor.srs_engine import SRSEngine
     from tutor.evaluator import GrowthPoint
     engine = SRSEngine(path=tmp_path / "cards.json", now=lambda: date(2026, 5, 21))
-    gps = [
-        GrowthPoint(tag=tag, user_utterance=f"u{i}", corrected_version=f"c{i}",
-                    explanation="why", context=None)
-        for i, (tag, _, _, _) in enumerate(configs)
-    ]
-    if gps:
-        engine.create_cards(gps, session_id="s1")
-        for (tag, reps, interval, qual), card in zip(configs, engine.all_cards()):
+    if configs:
+        gps = [
+            GrowthPoint(tag=tag, user_utterance=f"u{i}", corrected_version=f"c{i}",
+                        explanation="why", context=None)
+            for i, (tag, _, _, _) in enumerate(configs)
+        ]
+        for chunk_idx in range(0, len(gps), 5):
+            chunk = gps[chunk_idx:chunk_idx + 5]
+            engine.create_cards(chunk, session_id=f"s{chunk_idx // 5}")
+        by_utt = {c.user_utterance: c for c in engine.all_cards()}
+        for i, (_tag, reps, interval, qual) in enumerate(configs):
+            card = by_utt[f"u{i}"]
             card.repetitions = reps
             card.interval_days = interval
             card.last_review_quality = qual

@@ -15,11 +15,12 @@ def test_srs_engine_create_cards_persists_to_disk(tmp_path):
     ]
     cards = engine.create_cards(gps, session_id="sess_xyz")
     assert len(cards) == 2
-    assert cards[0].tag == "vocab"
-    assert cards[0].due_date == "2026-05-22"
-    assert cards[0].created_from_session_id == "sess_xyz"
-    assert cards[0].repetitions == 0
-    assert cards[0].ease_factor == 2.5
+    # Grammar is prioritized over vocab in create_cards' output order.
+    vocab_card = next(c for c in cards if c.tag == "vocab")
+    assert vocab_card.due_date == "2026-05-22"
+    assert vocab_card.created_from_session_id == "sess_xyz"
+    assert vocab_card.repetitions == 0
+    assert vocab_card.ease_factor == 2.5
 
     raw = json.loads((tmp_path / "cards.json").read_text())
     assert len(raw["cards"]) == 2
@@ -166,3 +167,76 @@ def test_srs_engine_all_cards_empty_when_no_cards(tmp_path):
 
     engine = SRSEngine(path=tmp_path / "cards.json", now=lambda: date(2026, 5, 21))
     assert engine.all_cards() == []
+
+
+def test_create_cards_skips_duplicates_by_user_utterance(tmp_path):
+    """Cross-session: a growth_point whose user_utterance matches an existing card is skipped."""
+    from tutor.srs_engine import SRSEngine
+    from tutor.evaluator import GrowthPoint
+    engine = SRSEngine(path=tmp_path / "cards.json")
+    # First create one card
+    gp1 = GrowthPoint(tag="grammar", user_utterance="I goed",
+                     corrected_version="I went", explanation="Past tense.", context=None)
+    engine.create_cards([gp1], session_id="s1")
+    # Now try to create another with same user_utterance
+    gp2 = GrowthPoint(tag="grammar", user_utterance="I goed",
+                     corrected_version="I went home", explanation="Better.", context=None)
+    new_cards = engine.create_cards([gp2], session_id="s2")
+    assert new_cards == []
+    assert len(engine.all_cards()) == 1
+
+
+def test_create_cards_dedupe_is_case_insensitive(tmp_path):
+    from tutor.srs_engine import SRSEngine
+    from tutor.evaluator import GrowthPoint
+    engine = SRSEngine(path=tmp_path / "cards.json")
+    gp1 = GrowthPoint(tag="grammar", user_utterance="  I Goed  ",
+                     corrected_version="I went", explanation="X", context=None)
+    engine.create_cards([gp1], session_id="s1")
+    gp2 = GrowthPoint(tag="vocab", user_utterance="i goed",
+                     corrected_version="i went", explanation="Y", context=None)
+    new_cards = engine.create_cards([gp2], session_id="s2")
+    assert new_cards == []
+
+
+def test_create_cards_caps_at_5_per_session(tmp_path):
+    from tutor.srs_engine import SRSEngine
+    from tutor.evaluator import GrowthPoint
+    engine = SRSEngine(path=tmp_path / "cards.json")
+    gps = [
+        GrowthPoint(tag="grammar", user_utterance=f"sentence number {i}",
+                    corrected_version="x", explanation="y", context=None)
+        for i in range(8)
+    ]
+    new_cards = engine.create_cards(gps, session_id="s1")
+    assert len(new_cards) == 5
+
+
+def test_create_cards_prioritizes_grammar_over_vocab(tmp_path):
+    from tutor.srs_engine import SRSEngine
+    from tutor.evaluator import GrowthPoint
+    engine = SRSEngine(path=tmp_path / "cards.json")
+    gps = (
+        [GrowthPoint(tag="vocab", user_utterance=f"vocab {i}", corrected_version="c",
+                     explanation="e", context=None) for i in range(4)]
+        + [GrowthPoint(tag="grammar", user_utterance=f"grammar {i}", corrected_version="c",
+                       explanation="e", context=None) for i in range(4)]
+    )
+    new_cards = engine.create_cards(gps, session_id="s1")
+    assert len(new_cards) == 5
+    tags = [c.tag for c in new_cards]
+    # All 4 grammars should make it; one vocab too
+    assert tags.count("grammar") == 4
+    assert tags.count("vocab") == 1
+
+
+def test_create_cards_all_duplicates_returns_empty(tmp_path):
+    from tutor.srs_engine import SRSEngine
+    from tutor.evaluator import GrowthPoint
+    engine = SRSEngine(path=tmp_path / "cards.json")
+    gp = GrowthPoint(tag="grammar", user_utterance="I goed",
+                    corrected_version="I went", explanation="x", context=None)
+    engine.create_cards([gp], session_id="s1")
+    # Second call: all dupes
+    result = engine.create_cards([gp, gp], session_id="s2")
+    assert result == []
