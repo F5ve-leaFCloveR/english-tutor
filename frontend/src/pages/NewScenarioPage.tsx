@@ -1,9 +1,11 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../api/client";
 
 export function NewScenarioPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [name, setName] = useState("");
   const [difficulty, setDifficulty] = useState("intermediate");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -26,6 +28,8 @@ export function NewScenarioPage() {
         system_prompt: systemPrompt.trim(),
         opening_line: openingLine.trim(),
       });
+      // Invalidate scenarios cache so ScenariosPage refetches and shows the new entry.
+      await qc.invalidateQueries({ queryKey: ["scenarios"] });
       navigate("/");
     } catch (e) {
       const msg = e instanceof ApiError
