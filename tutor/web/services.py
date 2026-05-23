@@ -102,9 +102,10 @@ def start_session_service(deps: Dependencies, scenario_id: str) -> StartSessionR
         system_prompt = build_system_prompt(scenario, user_native_language="Russian")
         opening_instruction = (
             "\n\nNow write the FIRST message you would say to start the conversation. "
-            "Stay in role. Write a complete short natural greeting (1-2 sentences). "
-            "Do NOT include placeholders like [Name], [Number], [topic] — write a real "
-            "opening as if you are actually speaking to the user. No square brackets."
+            "Stay in role. Write 1-2 short sentences MAX, like a real person speaking — "
+            "not a chatbot opener. Do NOT gush ('lovely to connect', 'wonderful', "
+            "'I'm so excited'). Do NOT pile up adjectives. Do NOT include placeholders "
+            "like [Name], [Number], [topic] — write a real opening, no square brackets."
         )
         opening = deps.llm.complete(
             messages=[{"role": "system", "content": system_prompt + opening_instruction}],

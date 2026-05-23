@@ -19,6 +19,16 @@ Reply naturally and conversationally in 2-4 sentences. Match the user's tone. As
 """
 
 
+_VOICE_STYLE_GUIDANCE = """Conversational style rules (apply ALWAYS, regardless of role):
+- Keep replies SHORT: 1-3 sentences. This is a spoken conversation, not an essay.
+- Sound like a real person, not a chatbot. Match the user's tone.
+- Do NOT gush or use marketing-style enthusiasm ("beautiful and healthy", "wonderful", "lovely to connect").
+- Do NOT pile up adjectives. Avoid phrases like "I'm so excited to help you with...", "It's a pleasure to chat about...".
+- No bullet lists, no markdown — plain spoken language only.
+- If the user asks a simple question, answer it directly in 1-2 sentences. Don't pad with greetings or wrap-ups.
+"""
+
+
 _CORRECTION_INSTRUCTIONS = """In the SAME response, identify up to 3 corrections to the user's MOST RECENT message only. Focus on:
   - vocab: word choice that's correct but weak/generic. Suggest a stronger, more precise word.
   - grammar: tense, articles, prepositions, word order errors.
@@ -39,7 +49,9 @@ Return STRICT JSON, no commentary:
 """
 
 
-_DEFAULT_CHAT_SYSTEM_PROMPT = _DEFAULT_CHAT_INTRO + "\n" + _CORRECTION_INSTRUCTIONS
+_DEFAULT_CHAT_SYSTEM_PROMPT = (
+    _DEFAULT_CHAT_INTRO + "\n" + _VOICE_STYLE_GUIDANCE + "\n" + _CORRECTION_INSTRUCTIONS
+)
 
 
 _FALLBACK_REPLY = "Sorry, I had trouble responding. Could you say that again?"
@@ -58,9 +70,15 @@ class ChatResponse(BaseModel):
 
 
 def build_session_chat_prompt(scenario: Scenario, user_native_language: str = "Russian") -> str:
-    """System prompt for a voice session: scenario role-play + JSON correction rules."""
+    """System prompt for a voice session: scenario role-play + voice style + JSON correction rules."""
     role_play = build_system_prompt(scenario, user_native_language=user_native_language)
-    return role_play + "\n\n" + _CORRECTION_INSTRUCTIONS
+    return (
+        role_play
+        + "\n\n"
+        + _VOICE_STYLE_GUIDANCE
+        + "\n\n"
+        + _CORRECTION_INSTRUCTIONS
+    )
 
 
 class ChatTurn:
